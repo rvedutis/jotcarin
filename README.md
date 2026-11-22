@@ -62,7 +62,12 @@ After changing `server.js`, restart with `npm run stop` then `npm run autostart:
 - **Move to note…** (`Ctrl+Shift+M`) moves the selected lines (or just the line the cursor is on) to the end of another note. Pick a note (most recently edited first, type to filter) or **New note**, which is titled from the first line and created in the selected folder. Moved to-dos join a to-do list at the end of that note. **Undo** is in the toast.
 - **⋯ → Clear Scratchpad** empties it (undoable).
 
-**Sidebar** — the **collapse** button at the top of the sidebar (or `Ctrl+\`) hides it to give notes the full window. While it's collapsed, move the mouse to the left edge (or over the small button at top left) and it slides out; it stays while you're using it (typing in search, a menu, renaming) and slides away when you click back in the page. Click the **pin** in it, the small button, or `Ctrl+\` again to keep it open. Your choice is remembered.
+**Sidebar** — the panel button at the top of the sidebar (or `Ctrl+\`) hides it to give notes the full window. While it's hidden, move the mouse to the left edge (or over the small panel button at top left) and it slides out; it stays while you're using it (typing in search, a menu, renaming) and slides away when you click back in the page. Click the **pin** in it, the small button, or `Ctrl+\` again to keep it open. Your choice is remembered. The Tasks panel on the right works the same way.
+
+**Settings** (gear at the bottom of the sidebar, or `Ctrl+,`):
+- **Appearance:** Light, Dark, or Match system (follows Windows' light/dark setting as it changes).
+- **Keyboard shortcuts:** click a shortcut and press new keys to change it; Backspace removes it, Esc cancels. Keys the editor or window already use (like `Ctrl+B` or `F11`) can't be taken, and plain letters need `Ctrl` or `Alt`. Picking keys another action uses moves them to the new action, and you're told which one lost them. **Reset** puts one back; **Reset all shortcuts** puts them all back.
+- Settings are kept per device: the desktop app and each browser remember their own.
 
 **Notes** live in the left column inside nested folders.
 - `+` buttons create notes/folders inside the selected folder (click **NOTES** to select top level).
@@ -96,10 +101,12 @@ Other ways in:
 **Tasks panel** (right side) — every task in one place, next to whatever note you're writing:
 - *Standalone tasks* — type into **Add a task** at the top of the panel.
 - *Note to-dos* — type `[ ] ` at the start of a line in any note (or click **To-do** in the toolbar). They're grouped by note in the panel.
+- **Due soon:** open tasks with a due date coming up are gathered at the top under **Overdue**, **Today**, **Tomorrow** and **Later this week** (through Sunday), each showing which note it's from. A group only appears when something is in it. These tasks also stay in their normal group below.
+- **Completed** sits at the bottom on a faintly shaded background.
 - **Edit right in the panel:** click a task's title to change it (Enter saves, Esc cancels). **Details**: free text under the title (hover a task and click the lines icon to add some). **Due date**: hover and click the calendar, then type plain English (“tomorrow”, “next fri”, “12/1”), pick a suggestion, or use the calendar. Overdue dates are red, today's green.
 - For a note to-do, its details are the lines written under it inside the note, and its due date shows as a badge at the end of the line. Click the badge to change it. Details that hold formatting (a table, code block…) are edited in the note instead.
 - Checking a task anywhere (the panel, the note, or `Ctrl+Enter` in the editor) moves it to **Completed**, still grouped the same way. Deletes can be undone from the toast.
-- **Show/hide:** click **Tasks** in the left sidebar, press `Alt+T` (opens it and puts the cursor in **Add a task**), or use the × in the panel. While it's closed, hovering the **Tasks** button at top right slides it out; clicking that button keeps it open. Your choice is remembered.
+- **Show/hide** works like the sidebar. The panel button at its top right hides it. While it's hidden, a small panel button at the top right of the window shows the number of open tasks; hover it and the panel slides out (click the pin to keep it open), or click it to keep it open. `Ctrl+]` shows or hides it, and `Alt+T` opens it with the cursor in **Add a task**. Your choice is remembered.
 
 **Dates** — type `@date` then plain English (or type `@` and pick **Date**); a picker shows the exact date before you insert it:
 
@@ -145,14 +152,21 @@ To restore:
 
 ### Shortcuts
 
+The first group can be changed in **Settings**. These are the defaults.
+
 | Key | Action |
 | --- | --- |
 | `Alt+N` | New note |
 | `Alt+T` | Open the Tasks panel and start a new task |
+| `Ctrl+]` | Show / hide the Tasks panel |
+| `Ctrl+,` | Settings |
 | `Alt+S` | Scratchpad (cursor on a new line, ready to type) |
 | `Ctrl+Shift+M` | In the Scratchpad: move selected lines to a note |
-| `Ctrl+\` | Collapse / pin the sidebar |
-| `/` or `Ctrl+Shift+F` | Search |
+| `Ctrl+\` | Show / hide the sidebar |
+| — | Lock (no key unless you set one) |
+| `Ctrl+Shift+F` | Search |
+| **Always** | |
+| `/` | Search (when you are not typing) |
 | `@` | Insert menu (date, image, table, …) |
 | `@date` … | Insert a date |
 | `Ctrl+;` | Insert today's date |

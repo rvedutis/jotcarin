@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Jotcairn</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%233563e9'/%3E%3Cstop offset='1' stop-color='%237a4fe0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <script>
+    // Pick the colour theme before anything is drawn, so a dark theme never flashes white.
+    try {
+      var t = JSON.parse(localStorage.getItem('jc:theme') || '"system"');
+      var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch (e) { /* storage unavailable: light */ }
+  </script>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -31,11 +39,6 @@
           <span class="nav-label">Scratchpad</span>
           <span class="nav-count" id="scratch-count"></span>
         </button>
-        <button class="nav-item" id="nav-todos" type="button" title="Show or hide the Tasks panel (Alt+T)">
-          <span class="nav-icon"></span>
-          <span class="nav-label">Tasks</span>
-          <span class="nav-count" id="todo-count"></span>
-        </button>
       </nav>
 
       <div class="tree-header">
@@ -51,6 +54,7 @@
         <div class="save-status" id="save-status" aria-live="polite"><span class="dot"></span><span class="label">All changes saved</span></div>
         <div class="footer-actions">
           <button class="btn-download" id="download" type="button" title="Download everything as Word, Markdown or PDF — or a database backup"></button>
+          <button class="btn-settings" id="settings-btn" type="button" title="Settings" aria-label="Settings"></button>
           <button class="btn-lock" id="lock-now" type="button" title="Lock Jotcairn (asks for the password again)" aria-label="Lock"></button>
           <button class="btn-wipe" id="wipe" type="button" title="Delete all notes, folders and tasks"></button>
         </div>

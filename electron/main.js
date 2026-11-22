@@ -7,7 +7,7 @@
  * it; otherwise the app starts its own server and stops it again when you quit.
  * The password lock lives in the server, so it applies here and in a browser alike.
  */
-const { app, BrowserWindow, Menu, Tray, dialog, shell, session, utilityProcess, screen } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, shell, session, utilityProcess, screen, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -188,7 +188,7 @@ function createWindow() {
     show: false,
     title: 'Jotcairn',
     icon: ICON,
-    backgroundColor: '#f5f6fb',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#13151c' : '#f5f6fb', // matches the theme until the page draws
     autoHideMenuBar: false,
     webPreferences: {
       contextIsolation: true,

@@ -18,7 +18,7 @@ function uid() {
 /** Names of things this app keeps in browser storage. */
 const KEYS = {
   unsaved: 'jc:unsaved', last: 'jc:last', expanded: 'jc:expanded', showCompleted: 'jc:showCompleted',
-  sidebarPinned: 'jc:sidebarPinned', tasksPinned: 'jc:tasksPinned',
+  sidebarPinned: 'jc:sidebarPinned', tasksPinned: 'jc:tasksPinned', theme: 'jc:theme', shortcuts: 'jc:shortcuts',
 };
 // One-time carry-over from before the rename (the app was called Actionbase and used "ab:" keys), including unsaved edits.
 try {
@@ -200,6 +200,9 @@ const P = {
   columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  panelRightClose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>',
+  panelRightOpen: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   panelClose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>',
   panelOpen: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>',
   pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
@@ -1065,7 +1068,6 @@ function renderTodoCount() {
   let open = 0;
   for (const t of S.tasks.values()) if (!t.done) open++;
   for (const n of S.notes.values()) for (const t of noteTasks(n)) if (!t.done) open++;
-  $('#todo-count').textContent = open ? String(open) : '';
   $('#tp-count').textContent = open ? String(open) : '';
   $('#tp-handle-count').textContent = open ? String(open) : '';
   const sp = S.notes.get(SCRATCH);
@@ -1129,7 +1131,7 @@ function renderTree() {
   tree.innerHTML = html || `<div class="tree-empty">No notes yet.<br><button data-tact="first-note">Create your first note</button></div>`;
   $('#tree-root').classList.toggle('selected', !S.selectedFolderId);
   const target = S.selectedFolderId ? S.folders.get(S.selectedFolderId)?.name : null;
-  $('#new-note').title = target ? `New note in “${target}” (Alt+N)` : 'New note (Alt+N)';
+  $('#new-note').title = target ? `New note in “${target}”${shortcuts.hint('newNote')}` : `New note${shortcuts.hint('newNote')}`;
   $('#new-folder').title = target ? `New folder in “${target}”` : 'New folder';
 }
 
@@ -1393,7 +1395,7 @@ function taskRow(t, { kind, note, terms, source }) {
   </li>`;
 }
 
-function tpRow(t, { kind, note }) {
+function tpRow(t, { kind, note, from = false }) {
   const attrs = kind === 's'
     ? `data-kind="s" data-id="${t.id}"`
     : `data-kind="n" data-note="${note.id}" data-index="${t.index}" data-text="${esc(t.text)}"`;
@@ -1410,6 +1412,7 @@ function tpRow(t, { kind, note }) {
     <button class="check" role="checkbox" aria-checked="${t.done}" data-act="toggle" title="${t.done ? 'Mark as not done' : 'Mark as done'}">${I.check}</button>
     <div class="tp-main">
       <div class="tp-title" contenteditable="plaintext-only" spellcheck="true" role="textbox" aria-label="Task" data-plain="${esc(t.text)}">${titleHtml}</div>
+      ${from ? `<div class="tp-from">${kind === 'n' ? `in <button type="button" data-act="open-note" data-note="${note.id}">${esc(noteTitle(note))}</button>` : 'Standalone task'}</div>` : ''}
       ${details}
       <div class="tp-meta">${due}</div>
     </div>
@@ -1445,6 +1448,37 @@ function tpGroups(g) {
   return h;
 }
 
+/**
+ * Open tasks with a due date coming up, at the top of the panel: Overdue, Today, Tomorrow,
+ * Later this week (through Sunday). A group only appears when it has something in it.
+ * The tasks also stay in their usual group below, so each note's list stays complete.
+ */
+function dueSoonHtml(open) {
+  const today = todayISO();
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay(); // 0 = Sunday
+  const toSunday = (7 - dow) % 7;
+  const buckets = { overdue: [], today: [], tomorrow: [], week: [] };
+  const add = (t, extra) => {
+    if (!t.due) return;
+    const n = daysFromToday(t.due, today);
+    const b = n < 0 ? 'overdue' : n === 0 ? 'today' : n === 1 ? 'tomorrow' : n <= toSunday ? 'week' : null;
+    if (b) buckets[b].push({ t, ...extra });
+  };
+  for (const t of open.standalone) add(t, { kind: 's' });
+  for (const { note, tasks } of open.notes) for (const t of tasks) add(t, { kind: 'n', note });
+  const groups = [
+    ['overdue', 'Overdue'], ['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'Later this week'],
+  ].filter(([k]) => buckets[k].length);
+  if (!groups.length) return '';
+  return `<section class="tp-soon" aria-label="Due soon">${groups.map(([k, label]) => {
+    const items = buckets[k].sort((a, b) => a.t.due.localeCompare(b.t.due) || collator.compare(a.t.text, b.t.text));
+    return `<div class="tp-soon-group ${k}">
+      <div class="tp-soon-head"><span class="dot"></span>${label}<span class="n">${items.length}</span></div>
+      <ul class="task-list">${items.map((x) => tpRow(x.t, { kind: x.kind, note: x.note, from: true })).join('')}</ul>
+    </div>`;
+  }).join('')}</section>`;
+}
+
 /** Is something in the panel being edited right now? (Then re-rendering waits until it's done.) */
 function taskEditing() {
   const a = document.activeElement;
@@ -1461,12 +1495,13 @@ function renderTaskPanel() {
     box.innerHTML = `<div class="tp-empty">No tasks yet.<br>Add one above, or type <code>[ ]</code> at the start of a line in any note — it shows up here, grouped by note.</div>`;
     return;
   }
-  let h = `<section class="section">
+  let h = dueSoonHtml(c.open);
+  h += `<section class="section">
     <h3 class="section-head open">Open <span class="pill">${c.openCount}</span></h3>
     ${c.openCount ? tpGroups(c.open) : `<div class="all-clear">${I.check} All caught up</div>`}
   </section>`;
   if (c.doneCount) {
-    h += `<section class="section">
+    h += `<section class="section done-section">
       <button type="button" class="section-head completed${S.showCompleted ? ' expanded' : ''}" data-act="toggle-completed" aria-expanded="${S.showCompleted}">
         <span class="chev">${I.chevron}</span>Completed <span class="pill">${c.doneCount}</span>
       </button>
@@ -1599,10 +1634,10 @@ const tasksPanel = {
     const app = $('#app');
     app.classList.toggle('tp-closed', !this.pinned);
     if (this.pinned) app.classList.remove('tp-peek');
-    $('#tp-pin').innerHTML = this.pinned || !isDesktop() ? I.x : I.pin;
-    $('#tp-pin').title = this.pinned || !isDesktop() ? 'Close the tasks panel (Alt+T)' : 'Keep the tasks panel open (Alt+T)';
-    $('#tp-pin').setAttribute('aria-label', $('#tp-pin').title);
-    $('#nav-todos').classList.toggle('active', this.visible());
+    const closing = this.pinned || !isDesktop();
+    $('#tp-pin').innerHTML = closing ? I.panelRightClose : I.pin;
+    $('#tp-pin').title = closing ? `Hide the Tasks panel — hover the button at top right to see it again${shortcuts.hint('toggleTasks')}` : `Keep the Tasks panel open${shortcuts.hint('toggleTasks')}`;
+    $('#tp-pin').setAttribute('aria-label', closing ? 'Hide the Tasks panel' : 'Keep the Tasks panel open');
   },
   visible() {
     const app = $('#app');
@@ -1643,7 +1678,7 @@ const tasksPanel = {
   toggle() { if (this.visible() && (this.pinned || !isDesktop())) this.close(); else this.open(); },
   setup() {
     $('.tp-icon').innerHTML = I.checkSquare;
-    $('.tp-handle-icon').innerHTML = I.checkSquare;
+    $('.tp-handle-icon').innerHTML = I.panelRightOpen;
     $('#add-task-form .add-icon').innerHTML = I.plus;
     this.apply();
     const enter = () => { this.hovering = true; this.peek(true); };
@@ -2213,7 +2248,7 @@ function openNote(id, opts = {}) {
         <div class="title-row">
           ${scratch
             ? `<h1 class="note-title static"><span class="scratch-badge">${I.sticky}</span>Scratchpad</h1>
-               <button class="btn-move-out" id="move-out" type="button" title="Move the selected lines (or the current line) into another note — Ctrl+Shift+M">${I.moveOut}<span>Move to note…</span></button>`
+               <button class="btn-move-out" id="move-out" type="button" title="Move the selected lines (or the current line) into another note${esc(shortcuts.hint('moveOut'))}">${I.moveOut}<span>Move to note…</span></button>`
             : '<input id="note-title" class="note-title" placeholder="Untitled" maxlength="500" autocomplete="off" aria-label="Note title">'}
           <button class="icon-btn" id="note-menu" title="More actions">${I.more}</button>
         </div>
@@ -2229,7 +2264,7 @@ function openNote(id, opts = {}) {
     element: $('#editor-host'),
     content: noteInfo(n).doc,
     placeholder: scratch
-      ? 'Jot anything — meeting notes, ideas, [ ] to-dos. Select lines and press Ctrl+Shift+M to move them into a note.'
+      ? `Jot anything — meeting notes, ideas, [ ] to-dos. Select lines and ${shortcuts.get('moveOut') ? `press ${shortcuts.get('moveOut')}` : 'click Move to note'} to move them into a note.`
       : 'Start writing…  Type [ ] for a to-do, @date for a date, @ for more',
     onUpdate: (e) => {
       const cur = S.notes.get(id);
@@ -2275,14 +2310,6 @@ function openNote(id, opts = {}) {
   if (scratch) {
     $('#move-out').addEventListener('mousedown', (e) => e.preventDefault()); // keep the editor's selection
     $('#move-out').addEventListener('click', () => moveOutDialog());
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'm' || e.code === 'KeyM') && S.view.id === SCRATCH) {
-        e.preventDefault();
-        moveOutDialog();
-      }
-    };
-    document.addEventListener('keydown', onKey, true);
-    viewCleanups.push(() => document.removeEventListener('keydown', onKey, true));
   }
 
   const tb = $('#toolbar');
@@ -2636,6 +2663,213 @@ function toast(msg, { type = 'info', action, onAction, timeout, sticky = false }
 }
 
 /* =====================================================================
+   Settings: colour theme and keyboard shortcuts. Kept in this browser /
+   app profile (they're personal preferences, not part of your notes).
+   ===================================================================== */
+const theme = {
+  pref() { const p = store.get(KEYS.theme, 'system'); return ['light', 'dark', 'system'].includes(p) ? p : 'system'; },
+  apply() {
+    const p = this.pref();
+    const dark = p === 'dark' || (p === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  },
+  set(p) { store.set(KEYS.theme, p); this.apply(); },
+  setup() {
+    this.apply();
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.apply());
+  },
+};
+
+/** App shortcuts you can change in Settings. Editor formatting keys (Ctrl+B …) stay fixed. */
+const SHORTCUTS = [
+  { id: 'newNote', label: 'New note', def: 'Alt+N' },
+  { id: 'scratch', label: 'Open the Scratchpad', hint: 'cursor on a new line, ready to type', def: 'Alt+S' },
+  { id: 'tasks', label: 'Add a task', hint: 'opens the Tasks panel', def: 'Alt+T' },
+  { id: 'toggleTasks', label: 'Show / hide the Tasks panel', def: 'Ctrl+]' },
+  { id: 'sidebar', label: 'Show / hide the sidebar', def: 'Ctrl+\\' },
+  { id: 'search', label: 'Search', hint: '/ also works when you’re not typing', def: 'Ctrl+Shift+F' },
+  { id: 'moveOut', label: 'Move lines to a note', hint: 'in the Scratchpad', def: 'Ctrl+Shift+M' },
+  { id: 'settings', label: 'Settings', def: 'Ctrl+,' },
+  { id: 'lock', label: 'Lock Jotcairn', def: '' },
+];
+// Keys the editor, the browser or the desktop app already use — not available for app shortcuts.
+const RESERVED = new Set([
+  'Ctrl+A', 'Ctrl+B', 'Ctrl+C', 'Ctrl+E', 'Ctrl+I', 'Ctrl+K', 'Ctrl+R', 'Ctrl+S', 'Ctrl+U', 'Ctrl+V', 'Ctrl+X', 'Ctrl+Y', 'Ctrl+Z',
+  'Ctrl+Shift+Z', 'Ctrl+Shift+V', 'Ctrl+Shift+S', 'Ctrl+Shift+H', 'Ctrl+Shift+B', 'Ctrl+Shift+I', 'Ctrl+Shift+7', 'Ctrl+Shift+8', 'Ctrl+Shift+9',
+  'Ctrl+Alt+1', 'Ctrl+Alt+2', 'Ctrl+Alt+3', 'Ctrl+Enter', 'Ctrl+;', 'Ctrl+=', 'Ctrl+-', 'Ctrl+0', 'Ctrl+Shift+=',
+  'F5', 'F11', 'F12', 'Alt+F4', 'Ctrl+W', 'Ctrl+P', 'Ctrl+F',
+]);
+const KEY_NAMES = {
+  Backslash: '\\', Slash: '/', Comma: ',', Period: '.', Semicolon: ';', Quote: "'", BracketLeft: '[', BracketRight: ']', Minus: '-', Equal: '=',
+  Backquote: '`', Space: 'Space', Enter: 'Enter', Escape: 'Esc', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert',
+  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+};
+/** The key combination of a key press, e.g. "Ctrl+Shift+M" (by physical key, so it works on any keyboard layout). */
+function comboOf(e) {
+  const c = e.code || '';
+  if (/^(Shift|Control|Alt|Meta|OS)/.test(c) || ['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return null;
+  let key = /^Key[A-Z]$/.test(c) ? c.slice(3) : /^Digit\d$/.test(c) ? c.slice(5) : /^Numpad\d$/.test(c) ? c.slice(6) : /^F\d{1,2}$/.test(c) ? c : KEY_NAMES[c];
+  if (!key) key = e.key && e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  if (!key) return null;
+  return [(e.ctrlKey || e.metaKey) && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', key].filter(Boolean).join('+');
+}
+const shortcuts = {
+  map: {},
+  load() {
+    const saved = store.get(KEYS.shortcuts, {});
+    this.map = {};
+    for (const s of SHORTCUTS) this.map[s.id] = typeof saved?.[s.id] === 'string' ? saved[s.id] : s.def;
+  },
+  get(id) { return this.map[id] ?? ''; },
+  /** " (Alt+N)" for tooltips, or "" when the action has no shortcut. */
+  hint(id) { return this.get(id) ? ` (${this.get(id)})` : ''; },
+  match(e) {
+    const combo = comboOf(e);
+    if (!combo) return null;
+    return SHORTCUTS.find((s) => this.map[s.id] && this.map[s.id] === combo)?.id || null;
+  },
+  set(id, combo) {
+    this.map[id] = combo;
+    const custom = {};
+    for (const s of SHORTCUTS) if (this.map[s.id] !== s.def) custom[s.id] = this.map[s.id];
+    store.set(KEYS.shortcuts, custom);
+    refreshShortcutHints();
+  },
+  /** Why a combination can't be used, or null if it can. */
+  problem(combo) {
+    if (RESERVED.has(combo)) return `${combo} is already used by the editor or the app window.`;
+    const mods = combo.split('+').slice(0, -1);
+    const key = combo.split('+').pop();
+    if (!mods.includes('Ctrl') && !mods.includes('Alt') && !/^F\d{1,2}$/.test(key)) return 'Use Ctrl or Alt (or a function key), so it doesn’t clash with typing.';
+    if (['Tab', 'Enter', 'Esc', 'Backspace', 'Delete', 'Up', 'Down', 'Left', 'Right'].includes(key)) return `${key} is needed for editing.`;
+    return null;
+  },
+};
+
+function runShortcut(id) {
+  switch (id) {
+    case 'newNote': createNote(); break;
+    case 'scratch': openScratchpad({ newLine: true }); break;
+    case 'tasks': tasksPanel.open({ focusAdd: true }); break;
+    case 'toggleTasks': tasksPanel.toggle(); break;
+    case 'sidebar': sidebar.toggle(); break;
+    case 'search': openSidebar(); $('#search').focus(); $('#search').select(); break;
+    case 'moveOut': moveOutDialog(); break;
+    case 'settings': settingsDialog(); break;
+    case 'lock': lock.now(); break;
+    default: break;
+  }
+}
+
+/** Tooltips and hints that mention a shortcut follow your settings. */
+function refreshShortcutHints() {
+  const set = (sel, text) => { const el = $(sel); if (el) el.title = text; };
+  set('#nav-scratch', `Scratchpad — quick notes and to-dos to sort later${shortcuts.hint('scratch')}`);
+  set('#sb-handle', `Show the sidebar — click to keep it open${shortcuts.hint('sidebar')}`);
+  set('#tp-handle', `Tasks — click to keep the panel open${shortcuts.hint('toggleTasks')}`);
+  set('#settings-btn', `Settings${shortcuts.hint('settings')}`);
+  set('#lock-now', `Lock Jotcairn (asks for the password again)${shortcuts.hint('lock')}`);
+  set('#move-out', `Move the selected lines (or the current line) into another note${shortcuts.hint('moveOut')}`);
+  if (typeof sidebar !== 'undefined' && $('#sidebar-pin')) sidebar.apply();
+  if (typeof tasksPanel !== 'undefined' && $('#tp-pin')) tasksPanel.apply();
+  if (S.notes) renderTree();
+}
+
+function settingsDialog() {
+  if ($('#dialog').open) return;
+  const themes = [['light', 'Light', 'sw-light'], ['dark', 'Dark', 'sw-dark'], ['system', 'Match system', 'sw-system']];
+  const rows = () => SHORTCUTS.map((s) => {
+    const k = shortcuts.get(s.id);
+    return `<div class="key-row${k !== s.def ? ' changed' : ''}" data-id="${s.id}">
+      <span class="k-label">${esc(s.label)}${s.hint ? `<small>${esc(s.hint)}</small>` : ''}</span>
+      <button type="button" class="key-btn${k ? '' : ' none'}" data-act="record" title="Click, then press the new keys">${k ? esc(k) : 'Not set'}</button>
+      <button type="button" class="key-reset" data-act="reset" title="Back to ${esc(s.def || 'not set')}">Reset</button>
+    </div>`;
+  }).join('');
+  let recording = null; // shortcut id being recorded
+  openDialog({
+    title: 'Settings',
+    icon: I.settings,
+    iconClass: 'blue',
+    body: `<div class="set-section"><h3>Appearance</h3>
+        <div class="theme-pick">${themes.map(([id, label, sw]) => `<button type="button" class="theme-opt${theme.pref() === id ? ' on' : ''}" data-theme="${id}" aria-pressed="${theme.pref() === id}">
+          <span class="theme-swatch ${sw}"><i class="s1"></i><i class="s2"><b></b><b style="width:70%"></b><b style="width:45%"></b></i></span>${label}</button>`).join('')}</div>
+      </div>
+      <div class="set-section"><h3>Keyboard shortcuts</h3>
+        <div class="keys" id="keys">${rows()}</div>
+        <p class="key-msg ok" id="key-msg">Click a shortcut, then press the new keys. Backspace removes it, Esc cancels.</p>
+        <p class="fixed-keys">Always available: <kbd>/</kbd> search · <kbd>Ctrl+S</kbd> save now · <kbd>Ctrl+Shift+V</kbd> paste plain text · editor formatting like <kbd>Ctrl+B</kbd>, <kbd>Ctrl+K</kbd>, <kbd>Ctrl+;</kbd> (today's date) and <kbd>Ctrl+Enter</kbd> (check a to-do). In the desktop app: <kbd>Ctrl +</kbd>/<kbd>Ctrl -</kbd> zoom, <kbd>F11</kbd> full screen.</p>
+        <button type="button" class="btn" id="keys-reset-all">Reset all shortcuts</button>
+      </div>`,
+    buttons: [{ label: 'Done', value: 'done', cls: 'btn-blue' }],
+    onMount: (d) => {
+      $('.dlg', d).classList.add('settings');
+      const msg = (text, ok = false) => { const m = $('#key-msg', d); m.textContent = text; m.classList.toggle('ok', ok); };
+      const redraw = () => { $('#keys', d).innerHTML = rows(); };
+      const stop = () => { recording = null; redraw(); };
+      d.addEventListener('click', (e) => {
+        const t = e.target.closest('.theme-opt'); // (not just [data-theme]: <html> carries that attribute too)
+        if (t) {
+          theme.set(t.dataset.theme);
+          $$('.theme-opt', d).forEach((b) => { b.classList.toggle('on', b === t); b.setAttribute('aria-pressed', String(b === t)); });
+          return;
+        }
+        const row = e.target.closest('.key-row');
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (row && act === 'record') {
+          redraw();
+          recording = row.dataset.id;
+          const btn = $(`.key-row[data-id="${recording}"] .key-btn`, d);
+          btn.classList.add('recording');
+          btn.classList.remove('none');
+          btn.textContent = 'Press keys…';
+          btn.focus();
+          msg('Press the new keys (Backspace removes it, Esc cancels).', true);
+        } else if (row && act === 'reset') {
+          const s = SHORTCUTS.find((x) => x.id === row.dataset.id);
+          const other = s.def && SHORTCUTS.find((x) => x.id !== s.id && shortcuts.get(x.id) === s.def);
+          if (other) shortcuts.set(other.id, '');
+          shortcuts.set(s.id, s.def);
+          stop();
+          msg(other ? `${s.def} is back on “${s.label}”; “${other.label}” no longer has a shortcut.` : `“${s.label}” is back to ${s.def || 'no shortcut'}.`, !other);
+        } else if (e.target.id === 'keys-reset-all') {
+          for (const s of SHORTCUTS) shortcuts.set(s.id, s.def);
+          stop();
+          msg('All shortcuts are back to their defaults.', true);
+        } else if (recording && !e.target.closest('.key-btn')) {
+          stop();
+          msg('Click a shortcut, then press the new keys. Backspace removes it, Esc cancels.', true);
+        }
+      });
+      d.addEventListener('keydown', (e) => {
+        if (!recording) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === 'Escape') { stop(); msg('Unchanged.', true); return; }
+        const s = SHORTCUTS.find((x) => x.id === recording);
+        if ((e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          shortcuts.set(s.id, '');
+          stop();
+          msg(`“${s.label}” no longer has a shortcut.`, true);
+          return;
+        }
+        const combo = comboOf(e);
+        if (!combo) return; // just a modifier so far
+        const problem = shortcuts.problem(combo);
+        if (problem) { msg(problem); return; }
+        const other = SHORTCUTS.find((x) => x.id !== s.id && shortcuts.get(x.id) === combo);
+        if (other) shortcuts.set(other.id, '');
+        shortcuts.set(s.id, combo);
+        stop();
+        msg(other ? `${combo} now does “${s.label}”; “${other.label}” no longer has a shortcut.` : `${combo} now does “${s.label}”.`, !other);
+      }, true);
+      // Esc while recording cancels the recording, not the dialog.
+      d.addEventListener('cancel', (e) => { if (recording) e.preventDefault(); });
+    },
+  });
+}
+
+/* =====================================================================
    Sidebar: on phones it slides over the page. On desktop it's either
    pinned open, or collapsed — then hovering the left edge (or the
    button) shows it, and it stays while you're using it.
@@ -2657,9 +2891,10 @@ const sidebar = {
     if (this.pinned) app.classList.remove('sb-peek');
     const btn = $('#sidebar-pin');
     btn.innerHTML = this.pinned ? I.panelClose : I.pin;
-    btn.title = this.pinned ? 'Collapse sidebar — it shows again when you hover the left edge (Ctrl+\\)' : 'Pin sidebar open (Ctrl+\\)';
-    btn.setAttribute('aria-label', this.pinned ? 'Collapse sidebar' : 'Pin sidebar open');
+    btn.title = this.pinned ? `Hide the sidebar — hover the left edge to see it again${shortcuts.hint('sidebar')}` : `Keep the sidebar open${shortcuts.hint('sidebar')}`;
+    btn.setAttribute('aria-label', this.pinned ? 'Hide the sidebar' : 'Keep the sidebar open');
   },
+  toggle() { if (isDesktop()) this.setPinned(!this.pinned); else if ($('#app').classList.contains('sidebar-open')) closeSidebar(); else openSidebar(); },
   setPinned(on) {
     this.pinned = on;
     store.set(KEYS.sidebarPinned, on);
@@ -2701,10 +2936,7 @@ const sidebar = {
       $('#app').classList.remove('sb-peek');
     }, true);
     document.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === '\\' || e.code === 'Backslash')) {
-        e.preventDefault();
-        this.setPinned(!this.pinned);
-      } else if (e.key === 'Escape' && !this.pinned && $('#app').classList.contains('sb-peek') && $('#sidebar').contains(document.activeElement) && $('#menu').hidden && !S.renaming) {
+      if (e.key === 'Escape' && !this.pinned && $('#app').classList.contains('sb-peek') && $('#sidebar').contains(document.activeElement) && $('#menu').hidden && !S.renaming) {
         document.activeElement.blur();
         $('#app').classList.remove('sb-peek');
       }
@@ -2717,11 +2949,12 @@ const sidebar = {
    Boot
    ===================================================================== */
 function setupChrome() {
+  shortcuts.load();
+  theme.setup();
   sidebar.setup();
   tasksPanel.setup();
   duePicker.setup();
   $('.search-icon').innerHTML = I.search;
-  $('#nav-todos .nav-icon').innerHTML = I.checkSquare;
   $('#new-folder').innerHTML = I.folderPlus;
   $('#new-note').innerHTML = I.notePlus;
   $('#wipe').innerHTML = `${I.trash}<span>Wipe database</span>`;
@@ -2730,7 +2963,9 @@ function setupChrome() {
   $('#sidebar-close').innerHTML = I.x;
   $('#lock-now').addEventListener('click', () => lock.now());
 
-  $('#nav-todos').addEventListener('click', () => tasksPanel.toggle());
+  $('#settings-btn').innerHTML = I.settings;
+  $('#settings-btn').addEventListener('click', () => settingsDialog());
+  refreshShortcutHints();
   $('#nav-scratch .nav-icon').innerHTML = I.sticky;
   $('#nav-scratch').addEventListener('click', () => openScratchpad());
   $('#new-note').addEventListener('click', () => createNote());
@@ -2751,19 +2986,23 @@ function setupChrome() {
       flushNotes();
       return;
     }
-    if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') || ((e.key === '/' || (e.code === 'Slash' && !e.shiftKey)) && !typing && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+    if ((e.key === '/' || (e.code === 'Slash' && !e.shiftKey)) && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
-      openSidebar();
-      $('#search').focus();
-      $('#search').select();
+      runShortcut('search');
       return;
     }
-    if (e.altKey && !e.ctrlKey && !e.metaKey) {
-      const k = e.key.toLowerCase();
-      if (k === 'n' || e.code === 'KeyN') { e.preventDefault(); createNote(); }
-      else if (k === 't' || e.code === 'KeyT') { e.preventDefault(); tasksPanel.open({ focusAdd: true }); }
-      else if (k === 's' || e.code === 'KeyS') { e.preventDefault(); openScratchpad({ newLine: true }); }
-    }
+    if (!$('#lock').hidden || health.state !== 'ok') return;
+    const id = shortcuts.match(e);
+    if (!id) return;
+    if (id === 'moveOut' && !(S.view.type === 'note' && isScratch(S.view.id))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    runShortcut(id);
+  }, true);
+  // Another window changed the theme or shortcuts: follow along.
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEYS.theme) theme.apply();
+    if (e.key === KEYS.shortcuts) { shortcuts.load(); refreshShortcutHints(); }
   });
 
   window.addEventListener('hashchange', route);
