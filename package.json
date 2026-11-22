@@ -1,0 +1,43 @@
+{
+  "name": "jotcairn",
+  "productName": "Jotcairn",
+  "version": "1.0.0",
+  "description": "Local notes + to-dos with folders, a rich-text editor, inline tasks, natural-language dates and global search.",
+  "private": true,
+  "main": "electron/main.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "stop": "node scripts/stop.js",
+    "autostart:on": "node scripts/autostart.js on",
+    "autostart:off": "node scripts/autostart.js off",
+    "autostart:status": "node scripts/autostart.js status",
+    "build:editor": "esbuild editor/src/index.js --bundle --format=esm --minify --target=es2020 --external:/dates.js --external:/datepopup.js --external:/markdown.js --legal-comments=none --outfile=public/vendor/editor.js",
+    "test": "node --disable-warning=ExperimentalWarning test/dates.test.mjs && node --disable-warning=ExperimentalWarning test/doc.test.mjs && node --disable-warning=ExperimentalWarning test/server.test.mjs",
+    "build:export": "esbuild editor/src/export.js --bundle --format=esm --minify --target=es2020 --external:/dates.js --external:/doc.js --legal-comments=none --outfile=public/vendor/export.js",
+    "build": "npm run build:editor && npm run build:export",
+    "app": "electron .",
+    "app:build": "node scripts/package-app.js",
+    "set-password": "node scripts/set-password.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@tiptap/core": "3.32.2",
+    "@tiptap/extension-highlight": "3.32.2",
+    "@tiptap/extension-image": "3.32.2",
+    "@tiptap/extension-list": "3.32.2",
+    "@tiptap/extension-table": "3.32.2",
+    "@tiptap/extension-text-style": "3.32.2",
+    "@tiptap/extensions": "3.32.2",
+    "@tiptap/pm": "3.32.2",
+    "@tiptap/starter-kit": "3.32.2",
+    "@tiptap/suggestion": "3.32.2",
+    "docx": "9.15.0",
+    "electron": "45.4.1",
+    "esbuild": "0.28.2",
+    "fflate": "0.8.3",
+    "pdfmake": "0.3.13"
+  }
+}

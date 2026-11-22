@@ -1,0 +1,6 @@
+data/
+node_modules/
+scripts/jotcairn-server.cmd
+dist/
+electron/config.json
+scripts/jotcairn-server.vbs
