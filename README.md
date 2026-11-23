@@ -1,167 +1,247 @@
-# Taskule
+# ✅ Taskule
 
-Local notes + tasks. Folders, a rich-text editor, inline to-dos, natural-language dates, a Tasks panel with every task in one place, and global search. Everything saves as you type.
+**Notes and to-dos that live on your computer, load instantly, and never lose a word.**
 
-## Desktop app (Windows)
+Taskule is a small, cozy notes app with a to-do list sitting next to it. You write notes, sprinkle to-dos into them, and every task ends up in one tidy panel sorted by when it's due. There's no cloud, no account and no subscription, and nobody else is invited. It's just you, your notes and a little SQLite file.
 
-Open **Taskule** from the Start menu or the Desktop shortcut. It opens in its own window.
+![Taskule: the sidebar with the Scratchpad pinned on top, a note in the middle, and every task on the right](docs/screenshots/hero.png)
 
-- **Password (optional):** Taskule has no password by default and opens straight away. To protect it, go to gear → **Settings… → Password → Set a password…**. From then on it asks for the password each time you open the app or browser. Change or remove it there too; both ask for the current password. The lock is enforced by the server, so it applies in a browser at http://localhost:4747 too.
-- **Lock now** (gear at the bottom of the sidebar, when a password is set) saves everything and locks immediately.
-- The password is stored hashed (scrypt) in `data/password.json`, which is never committed. Changing it locks anyone else currently unlocked. From the command line: `npm run set-password -- "new password"`, or `npm run set-password -- --none` to remove it. Forgot it? Delete `data/password.json` and Taskule opens without one.
-- **Server:** if the server is already running (for example from auto-start, below), the app uses it. Otherwise the app starts its own and stops it when you quit. Either way it uses the same notes in this folder's `data/`. The app checks every few seconds that a server is answering and starts one if not.
-- **System tray:** the **X** button hides the window to the system tray; Taskule keeps running and stays unlocked. Click the tray icon, or open Taskule from any shortcut, to bring the window back. Right-click the tray icon for **Open**, **Lock** and **Quit Taskule**. Quitting saves everything first and asks if it can't. Minimize works as usual.
-- **Quick capture from anywhere:** press **Alt + Win + Space** in any program and Taskule comes forward with a new empty line at the top of the Scratchpad and the cursor on it (if it's locked, you unlock first and then land there). It works whenever the desktop app is running, including hidden in the tray, so the app starts with Windows, quietly in the tray. Turn that off with the **Start with Windows** checkbox in the tray menu (the tray menu also has **Quick capture to Scratchpad**). Ctrl + Win + Space isn't possible, because Windows reserves it for switching keyboard input.
-- **Taskbar:** to pin it, open Taskule, right-click its taskbar button and choose **Pin to taskbar**. Clicking the pin while it's running switches to the open window, and the shortcuts are set up so Windows treats the pin and the window as one button.
-- **Desktop extras:** right-click gives Cut/Copy/Paste and spelling suggestions. `Ctrl +`/`Ctrl -`/`Ctrl 0` zoom, `F11` toggles full screen, and links open in your normal browser. Downloads ask where to save, starting in Downloads.
+> *All screenshots use made-up sample data. Grandma's chili recipe is, sadly, also made up.*
 
-### Building the app
+**The highlights:**
 
-The app is built into `dist\Taskule-win32-x64\Taskule.exe` (Electron). After changing any code, quit the app (tray icon → Quit Taskule) and rebuild. The rebuild updates that folder in place, so a taskbar pin survives:
+- 📝 **The Scratchpad**: one always-there note for "I'll sort this out later." Taskule opens on it.
+- ⚡ **Alt + Win + Space** from *anywhere* in Windows drops you onto a fresh line in the Scratchpad.
+- ✅ **To-dos inside your notes** (`[ ] `) that show up in a Tasks panel, grouped into **Overdue / Today / Tomorrow / Later this week**.
+- 🗂️ **A kanban board**: drag tasks between **To do**, **Doing** and **Done**.
+- 📅 **Dates in plain English**: type `@date next fri` and it just knows.
+- 🧲 **Drag-and-drop sidebar** with folders in whatever order you like, plus panels you can resize.
+- 🌙 **Dark mode**, adjustable keyboard shortcuts, and an optional password.
+- 📋 **Paste from Google Docs** with formatting, checklists, images and even dates intact.
+- 💾 **Paranoid about your data**: verified automatic backups, crash-safe saves, and exports to Word, PDF and Markdown.
+
+---
+
+**Jump to:** [Getting started](#-getting-started) · [The tour](#-the-tour) · [Shortcuts](#-shortcuts) · [Downloads & backups](#-downloads-backups--restoring) · [Reliability](#-reliability-and-data-safety) · [Development](#-development)
+
+---
+
+## 🚀 Getting started
+
+### The desktop app (Windows)
+
+Open **Taskule** from the Start menu or the Desktop shortcut and you're in. It runs in its own window, and also:
+
+- **Starts with Windows**, quietly, in the system tray. That's what keeps the quick-capture hotkey always ready. Don't want it? Untick **Start with Windows** in the tray menu.
+- **The X button hides it to the tray** rather than quitting. Taskule keeps running, so it's there the moment you need it. Click the tray icon (or any Taskule shortcut) to bring it back. Right-click the tray icon for **Open**, **Quick capture to Scratchpad**, **Lock**, **Start with Windows** and **Quit Taskule**. Quitting saves everything first, and asks if it can't. Minimize works as usual.
+- **Pin it to the taskbar:** open Taskule, right-click its taskbar button and choose **Pin to taskbar**. The pin and the window behave as one button.
+- **Desktop niceties:** right-click gives Cut/Copy/Paste and spelling suggestions. `Ctrl +` / `Ctrl -` / `Ctrl 0` zoom, `F11` goes full screen, links open in your normal browser, and downloads ask where to save (starting in Downloads).
+- **The server takes care of itself.** If a Taskule server is already running (for example from [auto-start](#start-the-server-automatically-with-windows)), the app uses it. Otherwise the app starts its own and stops it when you quit. It checks every few seconds that a server is answering and starts one if not. Either way, your notes live in this folder's `data/`.
+
+#### Building the app
+
+The app is built into `dist\Taskule-win32-x64\Taskule.exe` (Electron). After changing any code, quit the app (tray icon → **Quit Taskule**) and rebuild. The folder is updated in place, so your taskbar pin survives:
 
 ```bash
 npm run app:build
 ```
 
-This also (re)creates the Start menu and Desktop shortcuts (`-- --no-shortcuts` to skip). `npm run app` runs it straight from source without building.
+This also (re)creates the Start menu and Desktop shortcuts (add `-- --no-shortcuts` to skip that). `npm run app` runs it straight from source without building.
 
-## Run in a browser
+### In a browser
 
-Requires **Node.js 22.13+** (uses Node's built-in SQLite). Nothing to install to run it.
+You need **Node.js 22.13+** (Taskule uses Node's built-in SQLite). There's nothing to install:
 
 ```bash
 npm start
 ```
 
-Then open **http://localhost:4747** (and enter your password, if you've set one).
+Then open **http://localhost:4747**.
 
-### Start automatically with Windows
+- Different port: `PORT=5000 npm start` (PowerShell: `$env:PORT=5000; npm start`).
+- The server only listens on `127.0.0.1`, so nothing else on your network can reach it.
+- Your data lives in `data/taskule.db` (SQLite) and `data/images/`, with automatic backups in `data/backups/`. `data/` is never committed.
+
+#### Start the server automatically with Windows
 
 ```bash
 npm run autostart:on
 ```
 
-This adds an **Taskule server** shortcut to your Windows **Startup** folder. It runs the server hidden (no window) every time you log in, and starts it right away. If the server ever stops unexpectedly it's started again. Output goes to `data/server.log`. The shortcut runs `wscript.exe` directly, so it works even if `.vbs` files are set to open in an editor.
+This adds a **Taskule server** shortcut to your Windows **Startup** folder. It runs the server hidden every time you log in, starts it right away, and restarts it if it ever stops unexpectedly. Output goes to `data/server.log`. The shortcut runs `wscript.exe` directly, so it works even if `.vbs` files are set to open in an editor.
 
 | Command | What it does |
 | --- | --- |
 | `npm run autostart:status` | Shows whether auto-start is on and whether the server is running |
 | `npm run autostart:off` | Removes auto-start (a running server keeps running) |
-| `npm run stop` | Stops the running server, and the auto-start loop that would restart it (e.g. before restoring a backup) |
-| `npm run autostart:on` | Re-enables it, and starts the server if it isn't running |
+| `npm run stop` | Stops the server and the auto-start loop that would restart it (e.g. before restoring a backup) |
+| `npm run autostart:on` | Turns it back on, and starts the server if it isn't running |
 
-After changing `server.js`, restart with `npm run stop` then `npm run autostart:on`. (Changes to files in `public/` only need a browser refresh.)
+After changing `server.js`, restart with `npm run stop` and then `npm run autostart:on`. Changes in `public/` only need a browser refresh.
 
-- Different port: `PORT=5000 npm start` (PowerShell: `$env:PORT=5000; npm start`)
-- Data lives in `data/taskule.db` (SQLite) and `data/images/`, with automatic backups in `data/backups/` (see [Backups](#backups-and-restoring)). `data/` is never committed.
-- The server only listens on `127.0.0.1`, so nothing on your network can reach it.
+---
 
-## How it works
+## 🎡 The tour
 
-**Scratchpad** (the highlighted first row of Notes, or `Alt+S` from anywhere) is one permanent note for capturing things fast in meetings, then sorting them later. It's pinned at the top of the Notes list and can't be moved, deleted or renamed. **Taskule always opens on the Scratchpad.**
-- `Alt+S` opens it with a new empty line at the top and the cursor on it, ready to type. To-dos work as usual (`[ ] `) and appear near the top of the Tasks panel; the green badge counts its open ones.
-- **Move to note…** (`Ctrl+Shift+M`) moves the selected lines (or just the line the cursor is on) to the end of another note. Pick a note (most recently edited first, type to filter) or **New note**, which is titled from the first line and created in the selected folder. Moved to-dos join a to-do list at the end of that note. **Undo** is in the toast.
-- **⋯ → Clear Scratchpad** empties it (undoable).
+### 📝 The Scratchpad: your brain's junk drawer
 
-**Sidebar** — the panel button at the top of the sidebar (or `Ctrl+\`) hides it to give notes the full window. While it's hidden, move the mouse to the left edge (or over the small panel button at top left) and it slides out; it stays while you're using it (typing in search, a menu, renaming) and slides away when you click back in the page. Click the **pin** in it, the small button, or `Ctrl+\` again to keep it open. Your choice is remembered. The Tasks panel on the right works the same way.
+The **Scratchpad** is the green row pinned to the top of your notes. It's one permanent note for jotting things down *right now* (in a meeting, mid-thought, mid-sandwich) and sorting them out later. It can't be moved, renamed or deleted, and **Taskule always opens on it**.
 
-**Resizing:** drag the inner edge of the sidebar or the Tasks panel to make it wider or narrower (a blue line shows while you hover it). Double-click the edge to reset it; with the edge selected, the arrow keys also work. Widths are remembered, and the page in the middle always keeps enough room.
+- `Alt+S` jumps there with a **new empty line at the top**, cursor blinking, ready to type.
+- To-dos work as usual (`[ ] `) and show up near the top of the Tasks panel. The green badge counts the open ones.
+- **⋯ → Clear Scratchpad** wipes it clean. You can undo it, in case you get carried away.
 
-**Gear menu** (bottom of the sidebar): **Settings…**, **Download a copy…**, **Lock now** and **Wipe database…**, all in one place.
+**Move to note…** (`Ctrl+Shift+M`, or the button at the top) is the "sorting it out later" part. Select some lines, or just leave the cursor on one, and send them to the end of another note:
 
-**Settings** (gear → Settings…, or `Ctrl+,`):
-- **Appearance:** Light, Dark, or Match system (follows Windows' light/dark setting as it changes).
-- **Keyboard shortcuts:** click a shortcut and press new keys to change it; Backspace removes it, Esc cancels. Keys the editor or window already use (like `Ctrl+B` or `F11`) can't be taken, and plain letters need `Ctrl` or `Alt`. Picking keys another action uses moves them to the new action, and you're told which one lost them. **Reset** puts one back; **Reset all shortcuts** puts them all back.
-- Settings are kept per device: the desktop app and each browser remember their own.
+![Move to note: pick a note, or make a new one from the line](docs/screenshots/scratchpad.png)
 
-**Notes** live in the left column inside nested folders.
-- `+` buttons create notes/folders inside the selected folder (click **NOTES** to select top level).
-- **Arrange them your way:** drag a note or folder and drop it on the top or bottom edge of another to put it before or after it (a blue line shows where); drop it on the middle of a folder to put it inside. Or right-click → **Move up** / **Move down** (`Alt+↑` / `Alt+↓` on a selected row), or **Move to…** for another folder. Folders stay above notes at each level. Items you haven't arranged are listed alphabetically after the arranged ones. Reordering or moving a note doesn't count as editing it. The Tasks panel and downloads follow the same order.
-- Double-click a folder (or F2) to rename.
+Pick a note (most recently edited first; type to filter), or choose **New note**. A new note takes its title from the first line and is created in the selected folder. Moved to-dos join a to-do list at the end of the note. Changed your mind? **Undo** is right there in the toast.
 
-**Editor** — a normal WYSIWYG editor: headings, bold, italic, underline, strikethrough, code, links, bullet/numbered lists, quotes, code blocks, dividers and to-dos. Markdown-style shortcuts also work as you type (`# ` heading, `- ` bullet, `1. ` numbered, `[ ] ` to-do, `**bold**`, `> ` quote).
+### ⚡ Quick capture from anywhere: Alt + Win + Space
 
-The toolbar also has **highlight**, **clear formatting**, **images** and **tables** (click the table button inside a table for add/delete row/column options).
+In **any** program, press **Alt + Win + Space**. Taskule jumps forward with a fresh line at the top of the Scratchpad and the cursor on it. Type your thought, then get back to what you were doing. If Taskule is locked, you unlock first and then land there.
 
-**@ menu** — type `@` to insert things: Date, To-do, Image, Table, Link, Heading 1–3, lists, Quote, Code block, Divider. Keep typing to filter (`@ta` → Table), Enter to pick. `@` followed by anything that isn't a command (e.g. `@dana`) stays plain text.
+It works whenever the desktop app is running, even hidden in the tray, which is why the app starts with Windows. (Why not Ctrl + Win + Space? Windows keeps that one for switching keyboard languages and won't share.)
 
-**Images** — paste them (screenshots, "Copy image"), drag image files in, use the image toolbar button or `@image`. Click an image and drag a corner to resize (proportions are kept). Images are stored in `data/images/`; pictures pasted from Google Docs or web pages are downloaded and saved there too, so notes don't depend on links that can expire.
+### 🗂️ Notes, folders and making it yours
 
-**Moving notes from Google Docs** — just copy in Docs and paste into a note. Formatting is kept:
-- headings, bold, italic, underline, strikethrough, links (Google's redirect links are unwrapped to the real URL)
-- bulleted and numbered lists, including nested levels
-- Google Docs checklists → to-dos (ticked items stay ticked, and they appear in the Tasks panel)
-- tables, highlights and coloured text
-- images (saved locally)
-- written dates with a year — `Mar 6, 2026`, `March 6th 2026`, `06/10/2025` (month/day/year), `2026-03-06` — become date tags. Dates without a year are left as text.
+Notes live in nested folders in the left sidebar.
 
-Intentionally dropped so everything looks consistent: fonts, font sizes, line spacing, black/grey text colours and table cell shading.
+- The `+` buttons make a new note or folder inside the selected folder. Click **NOTES** to select the top level.
+- **Arrange things however you like.** Drag a note or folder onto the top or bottom edge of another to drop it before or after (a blue line shows where). Drop it on the middle of a folder to put it inside. Not a dragger? Right-click → **Move up** / **Move down** (or `Alt+↑` / `Alt+↓` on a selected row), or **Move to…** another folder.
+  - Folders stay above notes at each level. Anything you haven't arranged is listed alphabetically after the things you have.
+  - Reordering doesn't count as editing a note. The Tasks panel and downloads follow your order too.
+- Double-click a folder (or press `F2`) to rename it.
 
-Already pasted a note before date tagging existed? Open it, click **⋯ → Tag dates in this note** (undoable).
+**Make room.** Drag the inner edge of the sidebar or the Tasks panel to resize it (a blue line appears when you hover the edge). Double-click the edge to reset it, or select it and use the arrow keys. Widths are remembered, and the page in the middle always keeps enough room.
 
-Other ways in:
-- **Copy as Markdown** in Google Docs (right-click → *Copy as Markdown*, needs *Tools → Preferences → Enable Markdown*) also pastes fully formatted, including tables and checkboxes. Any Markdown pasted as plain text is converted.
-- Lines starting with ☐ / ☑ become to-dos.
-- `Ctrl+Shift+V` pastes as plain text (no formatting).
+**Hide the panels.** The panel button at the top of the sidebar (or `Ctrl+\`) tucks it away so your note gets the whole window. While it's hidden, nudge the mouse to the left edge and it slides back out. It stays while you're using it and slides away when you click back into the page. Click the **pin** (or press `Ctrl+\` again) to keep it open. The Tasks panel works the same way (`Ctrl+]`); while it is hidden, a small button at the top right shows how many tasks are open. Taskule remembers your choice.
 
-**Tasks panel** (right side) — every task in one place, next to whatever note you're writing:
-- *Standalone tasks* — type into **Add a task** at the top of the panel.
-- *Note to-dos* — type `[ ] ` at the start of a line in any note (or click **To-do** in the toolbar). They're grouped by note in the panel.
-- **Due soon:** open tasks with a due date coming up are gathered at the top under **Overdue**, **Today**, **Tomorrow** and **Later this week** (through Sunday), each showing which note it's from. A group only appears when something is in it. These tasks also stay in their normal group below.
-- **Completed** sits at the bottom, below a darker divider, on a faintly shaded background.
-- **When it was added:** each task shows a small, faint **Added …** date under it (hover for the exact time, and when it was last changed). This is separate from the due date. To-dos written in notes before this was added have no recorded date, so they show none. A note's footer shows when it was created and last edited.
-- **Edit right in the panel:** click a task's title to change it (Enter saves, Esc cancels). **Details**: free text under the title (hover a task and click the lines icon to add some). **Due date**: hover and click the calendar, then type plain English (“tomorrow”, “next fri”, “12/1”), pick a suggestion, or use the calendar. Overdue dates are red, today's green.
-- For a note to-do, its details are the lines written under it inside the note, and its due date shows as a badge at the end of the line. Click the badge to change it. Details that hold formatting (a table, code block…) are edited in the note instead.
-- **Columns (To do / Doing / Done):** every open task shows a small chip with its column. Click it to move the task, or use the board (below). Done is the same as checked: checking a task moves it to Done, and unchecking it returns it to the column it was in. In a note, a to-do in Doing shows a **Doing** badge; click it to change the column.
-- Checking a task anywhere (the panel, the board, the note, or `Ctrl+Enter` in the editor) moves it to **Completed**, still grouped the same way. Deletes can be undone from the toast.
-- **View as board** (top of the Tasks panel) shows the same tasks in three columns, **To do**, **Doing** and **Done**, in the main area. Drag a card to another column, or use its ⋯ menu (move, open its note, delete). Edit titles right on the card, click the due date to change it, and check a card off to send it to Done. **Show** picks all tasks, standalone tasks, or one note's. Open tasks are ordered by due date, and Done shows the most recently finished first. **Back to notes**, or the button again, returns you to your notes.
-- **Show/hide** works like the sidebar. The panel button at its top right hides it. While it's hidden, a small panel button at the top right of the window shows the number of open tasks; hover it and the panel slides out (click the pin to keep it open), or click it to keep it open. `Ctrl+]` shows or hides it, and `Alt+T` opens it with the cursor in **Add a task**. Your choice is remembered.
+### ✍️ The editor
 
-**Dates** — type `@date` then plain English (or type `@` and pick **Date**); a picker shows the exact date before you insert it:
+It's a normal "what you see is what you get" editor: headings, **bold**, *italic*, underline, strikethrough, `code`, links, lists, quotes, code blocks, dividers, **highlights**, **tables**, **images** and to-dos. Markdown habits work as you type: `# ` makes a heading, `- ` a bullet, `1. ` a numbered list, `[ ] ` a to-do, `**bold**` bold and `> ` a quote. Clear formatting is a toolbar button away. Click the table button inside a table for row and column options.
+
+**The @ menu:** type `@` to insert things: Date, To-do, Image, Table, Link, Heading 1–3, lists, Quote, Code block or Divider. Keep typing to filter (`@ta` → Table) and press Enter to pick. Anything that isn't a command (like `@dana`) stays plain text, so you can still @ people in your notes.
+
+**Images:** paste them, drag image files in, or use the toolbar button or `@image`. Click an image and drag a corner to resize it (proportions are kept). Images are saved in `data/images/`. Pictures pasted from Google Docs or web pages are downloaded too, so your notes never depend on a link that might expire.
+
+### 📅 Dates in plain English
+
+Type `@date` and then whatever you'd say out loud. A picker shows the exact date before you commit to it:
+
+![Typing "@date next fri" shows the actual dates to choose from](docs/screenshots/dates.png)
 
 | You type | You get (if today is Fri, Nov 13) |
 | --- | --- |
 | `@date`, `@date today` | Fri, Nov 13 |
 | `@date tomorrow`, `@date yesterday` | Sat, Nov 14 / Thu, Nov 12 |
-| `@date last thursday` | Thu, Nov 12 (most recent one before today) |
-| `@date thursday`, `@date this thu` | Thu, Nov 19 (next one, today counts) |
-| `@date next friday` | Fri, Nov 20 — or pick Nov 27 ("the week after") |
+| `@date last thursday` | Thu, Nov 12 (the most recent one before today) |
+| `@date thursday`, `@date this thu` | Thu, Nov 19 (the next one; today counts) |
+| `@date next friday` | Fri, Nov 20, or pick Nov 27 ("the week after") |
 | `@date thursday next week` | Thu, Nov 19 |
 | `@date in 3 days`, `@date 2 weeks from now`, `@date 3 days ago`, `@date +5` | relative dates |
-| `@date next week`, `@date next month`, `@date end of month`, `@date this weekend` | … |
-| `@date nov 20`, `@date 20th of november`, `@date 11/20`, `@date 2026-12-01` | absolute dates (nearest year if you leave it out) |
+| `@date next week`, `@date next month`, `@date end of month`, `@date this weekend` | exactly what they sound like |
+| `@date nov 20`, `@date 20th of november`, `@date 11/20`, `@date 2026-12-01` | absolute dates (the nearest year if you leave it out) |
 
-- `Ctrl+;` inserts today's date instantly; the **Date** toolbar button opens the picker.
-- "Today" is always computed in **US Eastern time** (EST/EDT handled automatically), whatever your computer's clock zone.
-- Press `Esc` to dismiss the picker and keep what you typed.
-- In open to-dos, overdue dates show **red** and today's show **green** — in the note and in the Tasks panel. `@date` also works in the **Add a task** box.
+- `Ctrl+;` drops in today's date instantly, and the **Date** toolbar button opens the picker.
+- "Today" always means today in **US Eastern time** (daylight saving included), whatever your computer's clock says.
+- `Esc` closes the picker and keeps what you typed.
+- In open to-dos, overdue dates turn **red** and today's turn **green**, both in the note and in the Tasks panel. `@date` works in the **Add a task** box too.
 
-**Search** (`/` or `Ctrl+Shift+F`) matches note titles, note text, dates, tasks and folder names. Clicking a note result opens it with the match selected.
+### ✅ The Tasks panel: everything you promised to do, in one place
 
-**Download** (gear → Download a copy…) saves a copy of everything — pick one:
+The panel on the right gathers **every** task:
 
-| Option | You get |
-| --- | --- |
-| **Word document (.docx)** | One formatted document: a To-dos summary (open and completed, grouped by note, with due dates and details), then every note grouped by folder — headings, lists, checkboxes, tables, images, links, highlights, colours. Opens in Word, Google Docs or Pages. |
-| **Markdown (.zip)** | One `.md` file per note in your folder structure, an `images/` folder, and `To-dos.md`. |
-| **PDF (.pdf)** | A print-ready copy of the same content as the Word export, with page numbers. |
-| **Database backup (.zip)** | An exact snapshot of `taskule.db` plus all images and a `RESTORE.txt`. Safe to take while the app is running. |
+- **Standalone tasks:** type into **Add a task** at the top. `Alt+T` opens the panel with the cursor already there.
+- **Note to-dos:** start any line in any note with `[ ] ` (or click **To-do** in the toolbar). They're grouped by note in the panel, in your sidebar order.
 
-**Wipe database** (gear → Wipe database…) deletes everything after you type `delete`. A safety backup is always made first (no backup, no wipe), and image files are kept for 30 days so that backup can be restored with its pictures.
+<img src="docs/screenshots/tasks.png" alt="The Tasks panel: due-date groups, column chips, 'Added' dates, and the due-date picker" width="420" align="right">
 
-### Backups and restoring
+- **Due soon floats to the top.** Open tasks with an upcoming due date gather under **Overdue**, **Today**, **Tomorrow** and **Later this week** (through Sunday), each showing which note it came from. Empty groups stay out of the way. These tasks also stay in their normal group below.
+- **Edit right in the panel.** Click a title to change it (Enter saves, Esc cancels). Hover a task for:
+  - **Details:** free text under the title (the lines icon).
+  - **Due date:** the calendar. Type plain English ("tomorrow", "next fri", "12/1"), pick a suggestion, or use the calendar. Overdue is red, today is green.
+- **For note to-dos**, the details are the lines written under the to-do in the note, and the due date is a badge at the end of the line (click it to change it). Details with fancy formatting (a table, a code block…) are edited in the note.
+- **"Added …" dates.** Every task shows a small, faint date underneath for when it was created. That's separate from when it's *due*. Hover it for the exact time and when it was last changed. To-dos written before this feature existed have no recorded date, so they show none. A note's footer shows when the note was created and last edited.
+- **Columns:** each open task wears a little chip showing its column, **To do** or **Doing**. Click the chip to move it. In a note, a to-do that's in progress gets a **Doing** badge.
+- **Check it off** anywhere (the panel, the board, the note, or `Ctrl+Enter` in the editor) and it moves to **Completed** at the bottom, below a darker divider, still grouped the same way. Deleted something by accident? Undo is in the toast.
 
-Taskule backs itself up automatically to `data/backups/`: when the server starts (if the newest backup is over 12 hours old), once a day while it runs, and right before any wipe. Each backup is checked after it's written; the newest 20 are kept. The Download dialog shows when the last one ran, and you're alerted if a backup ever fails. **Download → Database backup** gives you a zip you can keep elsewhere.
+<br clear="right">
 
-To restore:
-1. Quit the app (tray icon → Quit Taskule) and run `npm run stop`.
-2. Rename `data/taskule.db` to `taskule-damaged.db` (keep it), and delete `taskule.db-wal` / `taskule.db-shm` if present.
-3. Copy the backup you want (e.g. `data/backups/taskule-2026-11-20-090000-auto.db`, or `taskule.db` from a downloaded zip) to `data/taskule.db`. From a zip, also copy its `images/` into `data/images/`.
-4. Start Taskule again.
+### 🗂️ The board: To do → Doing → Done
 
-### Shortcuts
+Click **View as board** at the top of the Tasks panel and your tasks spread out into three columns across the main area:
 
-The first group can be changed in **Settings**. These are the defaults.
+![The board: To do, Doing and Done columns](docs/screenshots/board.png)
+
+- **Drag a card** to another column, or use its **⋯** menu (move it, open its note, delete it).
+- Edit titles right on the card, click a due date to change it, and tick a card to send it to **Done**.
+- **Show** picks all tasks, just standalone tasks, or one note's tasks.
+- Open cards are sorted by due date, and **Done** shows the most recently finished first.
+- **Done** and "checked" mean the same thing. Checking a task moves it to Done, and unchecking it sends it back to the column it was in.
+- **Back to notes** (or the button again) takes you back to your notes. The column is saved with the task, so the list and the board always agree.
+
+### 🔍 Search
+
+Press `/` (or `Ctrl+Shift+F`) to search note titles, note text, dates, tasks and folder names all at once. Clicking a note result opens it with the match selected.
+
+### 📋 Moving in from Google Docs
+
+Copy in Docs, paste into a note. That's it. Taskule keeps:
+
+- headings, bold, italic, underline, strikethrough and links (Google's redirect links are unwrapped to the real URL)
+- bulleted and numbered lists, including nested ones
+- Google Docs checklists, which become to-dos (ticked items stay ticked, and they show up in the Tasks panel)
+- tables, highlights and coloured text
+- images (saved locally)
+- written dates with a year (`Mar 6, 2026`, `March 6th 2026`, `06/10/2025` as month/day/year, `2026-03-06`), which become date tags. Dates without a year stay as text.
+
+Fonts, font sizes, line spacing, black/grey text colours and table cell shading are dropped on purpose, so everything looks consistent.
+
+Pasted a note before date tagging existed? Open it and choose **⋯ → Tag dates in this note** (undoable).
+
+Other ways in:
+- **Copy as Markdown** in Google Docs (right-click → *Copy as Markdown*; turn it on under *Tools → Preferences → Enable Markdown*) also pastes fully formatted, tables and checkboxes included. Any Markdown pasted as plain text is converted.
+- Lines starting with ☐ / ☑ become to-dos.
+- `Ctrl+Shift+V` pastes as plain text, no formatting.
+
+### ⚙️ Settings, dark mode and the gear menu
+
+The **gear** at the bottom of the sidebar keeps the grown-up stuff in one place: **Settings…**, **Download a copy…**, **Lock now** (once you've set a password) and **Wipe database…**.
+
+![Settings: appearance, password and keyboard shortcuts](docs/screenshots/settings.png)
+
+**Settings** (gear → Settings…, or `Ctrl+,`):
+
+- **Appearance:** Light, Dark, or Match system (it follows Windows as it switches).
+- **Password:** Taskule has none by default and opens straight away. If you want one, choose **Set a password…** here. You can change or remove it later in the same spot (both ask for the current password).
+- **Keyboard shortcuts:** click one and press new keys. Backspace removes it and Esc cancels. Keys the editor or window already use (like `Ctrl+B` or `F11`) can't be taken, and plain letters need `Ctrl` or `Alt`. If you grab keys another action uses, they move over and Taskule tells you which action lost them. **Reset** puts one back; **Reset all shortcuts** puts them all back.
+- Settings are kept per device: the desktop app and each browser remember their own.
+
+And yes, dark mode is properly dark:
+
+![Dark mode, featuring a highly classified chili recipe](docs/screenshots/dark.png)
+
+<details>
+<summary>🌙 The board in dark mode, too</summary>
+
+![The board in dark mode](docs/screenshots/board-dark.png)
+
+</details>
+
+### 🔒 The optional password
+
+- Once a password is set, Taskule asks for it each time you open the app or the browser. **Lock now** in the gear menu saves everything and locks immediately. The lock is enforced by the server, so it covers the browser at http://localhost:4747 too.
+- It's stored hashed (scrypt) in `data/password.json`, which is never committed. Changing it locks out anyone else who's currently unlocked.
+- From the command line: `npm run set-password -- "new password"`, or `npm run set-password -- --none` to remove it.
+- Forgot it? Delete `data/password.json` and Taskule opens without one.
+- If the lock appears mid-edit (the password changed, or a session turned 30 days old), whatever you were saving waits behind the lock screen and is sent once you unlock. Nothing is dropped.
+
+---
+
+## 🎹 Shortcuts
+
+The first group can be changed in **Settings**; these are the defaults.
 
 | Key | Action |
 | --- | --- |
@@ -174,13 +254,13 @@ The first group can be changed in **Settings**. These are the defaults.
 | `Ctrl+\` | Show / hide the sidebar |
 | — | Lock (no key unless you set one) |
 | `Ctrl+Shift+F` | Search |
-| **Always** | |
+| **Always available** | |
 | `Alt+Win+Space` | Desktop app, from anywhere in Windows: quick capture to the Scratchpad |
-| `/` | Search (when you are not typing) |
+| `/` | Search (when you're not typing) |
 | `@` | Insert menu (date, image, table, …) |
 | `@date` … | Insert a date |
 | `Ctrl+;` | Insert today's date |
-| `Ctrl+Enter` | Check/uncheck the to-do at the cursor (or make the line a to-do) |
+| `Ctrl+Enter` | Check/uncheck the to-do at the cursor (or turn the line into a to-do) |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+U` | Bold / italic / underline |
 | `Ctrl+Shift+S` | Strikethrough |
 | `Ctrl+Shift+H` | Highlight |
@@ -189,9 +269,57 @@ The first group can be changed in **Settings**. These are the defaults.
 | `Ctrl+K` | Link (Ctrl+click a link to open it) |
 | `Ctrl+Alt+1/2/3` | Heading 1/2/3 |
 | `Ctrl+Shift+7/8/9` | Numbered / bulleted / to-do list |
-| `Tab` / `Shift+Tab` | Indent / outdent list item |
+| `Tab` / `Shift+Tab` | Indent / outdent a list item |
 
-## Development
+---
+
+## 💾 Downloads, backups & restoring
+
+**Download a copy** (gear → Download a copy…) saves everything. Pick a flavour:
+
+| Option | You get |
+| --- | --- |
+| **Word document (.docx)** | One formatted document: a To-dos summary (open and completed, grouped by note, with due dates and details), then every note grouped by folder, with headings, lists, checkboxes, tables, images, links, highlights and colours. Opens in Word, Google Docs or Pages. |
+| **Markdown (.zip)** | One `.md` file per note in your folder structure, an `images/` folder, and `To-dos.md`. |
+| **PDF (.pdf)** | A print-ready copy of the same content as the Word export, with page numbers. |
+| **Database backup (.zip)** | An exact snapshot of `taskule.db` plus all images and a `RESTORE.txt`. Safe to take while the app is running. |
+
+**Wipe database** (gear → Wipe database…) deletes everything once you type `delete`. A safety backup is always made first (no backup, no wipe), and image files are kept for 30 days so that backup can be restored with its pictures.
+
+### Backups and restoring
+
+Taskule backs itself up automatically to `data/backups/`: when the server starts (if the newest backup is more than 12 hours old), once a day while it runs, and right before any wipe. Each backup is checked after it's written, and the newest 20 are kept. The Download dialog shows when the last one ran, and you're alerted if a backup ever fails. **Download → Database backup** gives you a zip to keep somewhere else.
+
+To restore:
+1. Quit the app (tray icon → **Quit Taskule**) and run `npm run stop`.
+2. Rename `data/taskule.db` to `taskule-damaged.db` (keep it), and delete `taskule.db-wal` / `taskule.db-shm` if they're there.
+3. Copy the backup you want (e.g. `data/backups/taskule-2026-11-20-090000-auto.db`, or `taskule.db` from a downloaded zip) to `data/taskule.db`. If it came from a zip, also copy its `images/` into `data/images/`.
+4. Start Taskule again.
+
+---
+
+## 🦺 Reliability and data safety
+
+Taskule is easygoing about most things, but not about your data.
+
+**You can't type into a void.** The app checks the server every few seconds, and right away whenever a save fails. If the server can't be reached, saves keep failing, or the database reports a problem, the window is covered with a message explaining what's wrong, and editing pauses until it's fixed. When the server comes back, the cover lifts by itself and everything waiting is saved. The desktop app also restarts a missing server on its own.
+
+- **Nothing typed is lost.** Every note edit is kept on this computer until the server confirms it's saved. If the app or browser closes while the server is down, those edits are restored (with a notice) the next time you open Taskule.
+- **Problems are never quiet.** A refused save, a conflict or a failed backup shows a message that stays until you close it.
+- **Two windows can't overwrite each other.** Each note has a version number. If a note changed in another window or tab since this one loaded it, the save is refused rather than overwriting. Both texts are kept: the other version stays, and this window's edits are saved as a "(my copy …)" note next to it.
+- **The database is protected.** SQLite runs in WAL mode with `synchronous=FULL`, so a change is on disk before it's reported as saved, and it survives a crash or a power cut. Every write is a transaction, note content is checked to be a valid document before it's stored, and all writes are idempotent, so retries can't duplicate anything.
+- **Damage is caught, not spread.** The database's structure is checked at startup and every 6 hours. If a check fails, the server refuses all changes so a damaged file isn't made worse, the app shows "Your database needs attention", and no automatic backup is taken from it, so it can't push out the good ones. Restore from `data/backups/` ([above](#backups-and-restoring)).
+- **Automatic, verified backups** run daily, at startup and before a wipe.
+- **Images are never deleted early.** An image file is only removed after no note has used it for 30 days, so undo and restored backups still find their pictures.
+- **The server keeps running.** An unexpected error in one request is logged to `data/server.log` and the server carries on. The auto-start launcher restarts the server if it stops.
+- Note edits are sent about 0.4 s after you stop typing, and immediately on blur, navigation, tab switch or close.
+- The API rejects cross-origin requests, so other websites open in your browser can't touch your data.
+- **Earlier names.** Taskule used to be called Jotcairn, and before that Actionbase. The first time the server starts after a rename, `data/jotcairn.db` (or `data/actionbase.db`) becomes `data/taskule.db`: pending writes are folded in first, and the file is renamed rather than copied. Older `jotcairn-*.db` and `actionbase-*.db` backups still count as backups. Browser-stored settings and unsaved-edit backups carry over, and the desktop app copies its settings from the old profile.
+- Notes written with the earlier markdown editor are converted to rich text automatically the first time the app loads.
+
+---
+
+## 🔧 Development
 
 The editor ([TipTap](https://tiptap.dev)) and the exporters ([docx](https://docx.js.org), [pdfmake](https://pdfmake.github.io), [fflate](https://github.com/101arrowz/fflate)) are pre-bundled into `public/vendor/`, so running the app needs no `npm install`. To change them:
 
@@ -200,22 +328,11 @@ npm install
 npm run build
 ```
 
-`npm test` runs the date-parser tests, the to-do helper tests (details, due dates, editing), and the server tests (task details and due dates, renaming a database from the app's earlier names, password setup and lock, Scratchpad rules, content validation, version conflicts, backups, wipe safety, damaged database and password file) against throwaway servers. Paste handling lives in `editor/src/paste.js`; `test/fixtures/gdocs-paste.html` is a sample Google Docs clipboard payload for checking it.
+`npm test` runs three sets of tests against throwaway servers:
+- the date-parser tests
+- the to-do helper tests (details, due dates, columns, editing)
+- the server tests: task details, due dates and columns; sidebar order; renaming a database from the app's earlier names; the optional password; Scratchpad rules; content validation; version conflicts; backups; wipe safety; and a damaged database or password file
 
-## Reliability and data safety
+Paste handling lives in `editor/src/paste.js`, and `test/fixtures/gdocs-paste.html` is a sample Google Docs clipboard payload for checking it.
 
-**You can't work in Taskule while it can't save.** The app checks the server every few seconds, and immediately whenever a save fails. If the server can't be reached, saving keeps failing, or the database reports a problem, the window is covered with a message saying what's wrong and editing is paused until it's fixed. When the server comes back, the cover lifts by itself and everything waiting is saved. The desktop app also restarts a missing server on its own.
-
-- **Nothing typed is lost.** Every note edit is kept on this computer until the server confirms it's saved. If the app or browser closes while the server is down, those edits are restored (with a notice) the next time you open Taskule.
-- **Problems are never quiet.** A save the server refuses, a conflict, or a failed backup shows a message that stays until you close it.
-- **Two windows can't overwrite each other.** Each note has a version number. If a note was changed in another window or tab since this one loaded it, the save is refused instead of overwriting. Both texts are kept: the other version stays, and this window's edits are saved as a "(my copy …)" note next to it.
-- **The database is protected.** SQLite runs in WAL mode with `synchronous=FULL`, so a change is on disk before it's reported saved, and it survives a crash or power cut. Every write is a transaction. Note content is checked to be a valid document before it's stored. All writes are idempotent, so retries can't duplicate anything.
-- **Damage is caught, not spread.** The database's structure is checked at startup and every 6 hours. If a check fails, the server refuses all changes so a damaged file isn't made worse, the app shows "Your database needs attention", and no automatic backup is taken from it, so it can't push out good backups. Restore from `data/backups/` (above).
-- **Automatic, verified backups** run daily, at startup and before a wipe (see [Backups](#backups-and-restoring)).
-- **Images are never deleted early.** An image file is only removed after no note has used it for 30 days, so undo and restored backups still find their pictures.
-- **The server keeps running.** An unexpected error in one request is logged to `data/server.log` and the server carries on. The auto-start launcher restarts the server if it stops.
-- Note edits are sent ~0.4 s after you stop typing, and immediately on blur, navigation, tab switch or close.
-- **Earlier names.** Taskule was called Jotcairn, and before that Actionbase. The first time the server starts after a rename, `data/jotcairn.db` (or `data/actionbase.db`) becomes `data/taskule.db`: pending writes are folded in first, and the file is renamed rather than copied. Older `jotcairn-*.db` and `actionbase-*.db` backups still count as backups. Browser-stored settings and unsaved-edit backups carry over, and the desktop app copies its settings from the old profile.
-- Notes written with the earlier markdown editor are converted to rich text automatically the first time the app loads.
-- The API rejects cross-origin requests, so other websites open in your browser can't touch your data.
-- If the lock appears mid-edit (password changed, or a 30-day-old session), whatever you were saving waits behind the lock screen and is sent once you unlock. Nothing is dropped.
+The README screenshots live in `docs/screenshots/` and show sample data only.

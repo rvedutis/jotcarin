@@ -113,7 +113,8 @@
   color-scheme: dark;
 }
 /* Highlighted text keeps dark lettering on its bright highlight colour, in either theme. */
-:root[data-theme="dark"] .rich mark, :root[data-theme="dark"] .task-text mark, :root[data-theme="dark"] .tp-title mark { color: #1a1f30; }
+/* !important: the editor writes an inline "color: inherit" on coloured highlights, which would otherwise win. */
+:root[data-theme="dark"] .rich mark, :root[data-theme="dark"] .task-text mark, :root[data-theme="dark"] .tp-title mark { color: #1a1f30 !important; }
 :root[data-theme="dark"] .rich img:not(.ProseMirror-separator) { background: #fff; }
 
 * { box-sizing: border-box; }
