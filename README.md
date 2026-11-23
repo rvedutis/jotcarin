@@ -58,12 +58,14 @@ After changing `server.js`, restart with `npm run stop` then `npm run autostart:
 
 ## How it works
 
-**Scratchpad** (top of the sidebar, or `Alt+S` from anywhere) is one permanent note for capturing things fast in meetings, then sorting them later. It can't be deleted, renamed or moved into a folder.
+**Scratchpad** (the highlighted first row of Notes, or `Alt+S` from anywhere) is one permanent note for capturing things fast in meetings, then sorting them later. It's pinned at the top of the Notes list and can't be moved, deleted or renamed. **Taskule always opens on the Scratchpad.**
 - `Alt+S` opens it with a new empty line at the top and the cursor on it, ready to type. To-dos work as usual (`[ ] `) and appear near the top of the Tasks panel; the green badge counts its open ones.
 - **Move to note…** (`Ctrl+Shift+M`) moves the selected lines (or just the line the cursor is on) to the end of another note. Pick a note (most recently edited first, type to filter) or **New note**, which is titled from the first line and created in the selected folder. Moved to-dos join a to-do list at the end of that note. **Undo** is in the toast.
 - **⋯ → Clear Scratchpad** empties it (undoable).
 
 **Sidebar** — the panel button at the top of the sidebar (or `Ctrl+\`) hides it to give notes the full window. While it's hidden, move the mouse to the left edge (or over the small panel button at top left) and it slides out; it stays while you're using it (typing in search, a menu, renaming) and slides away when you click back in the page. Click the **pin** in it, the small button, or `Ctrl+\` again to keep it open. Your choice is remembered. The Tasks panel on the right works the same way.
+
+**Resizing:** drag the inner edge of the sidebar or the Tasks panel to make it wider or narrower (a blue line shows while you hover it). Double-click the edge to reset it; with the edge selected, the arrow keys also work. Widths are remembered, and the page in the middle always keeps enough room.
 
 **Gear menu** (bottom of the sidebar): **Settings…**, **Download a copy…**, **Lock now** and **Wipe database…**, all in one place.
 
@@ -107,10 +109,12 @@ Other ways in:
 - *Note to-dos* — type `[ ] ` at the start of a line in any note (or click **To-do** in the toolbar). They're grouped by note in the panel.
 - **Due soon:** open tasks with a due date coming up are gathered at the top under **Overdue**, **Today**, **Tomorrow** and **Later this week** (through Sunday), each showing which note it's from. A group only appears when something is in it. These tasks also stay in their normal group below.
 - **Completed** sits at the bottom, below a darker divider, on a faintly shaded background.
-- **When it was added:** each task shows a faint **Added …** date next to its title (hover for the exact time, and when it was last changed). This is separate from the due date. To-dos written in notes before this was added have no recorded date, so they show none. A note's footer shows when it was created and last edited.
+- **When it was added:** each task shows a small, faint **Added …** date under it (hover for the exact time, and when it was last changed). This is separate from the due date. To-dos written in notes before this was added have no recorded date, so they show none. A note's footer shows when it was created and last edited.
 - **Edit right in the panel:** click a task's title to change it (Enter saves, Esc cancels). **Details**: free text under the title (hover a task and click the lines icon to add some). **Due date**: hover and click the calendar, then type plain English (“tomorrow”, “next fri”, “12/1”), pick a suggestion, or use the calendar. Overdue dates are red, today's green.
 - For a note to-do, its details are the lines written under it inside the note, and its due date shows as a badge at the end of the line. Click the badge to change it. Details that hold formatting (a table, code block…) are edited in the note instead.
-- Checking a task anywhere (the panel, the note, or `Ctrl+Enter` in the editor) moves it to **Completed**, still grouped the same way. Deletes can be undone from the toast.
+- **Columns (To do / Doing / Done):** every open task shows a small chip with its column. Click it to move the task, or use the board (below). Done is the same as checked: checking a task moves it to Done, and unchecking it returns it to the column it was in. In a note, a to-do in Doing shows a **Doing** badge; click it to change the column.
+- Checking a task anywhere (the panel, the board, the note, or `Ctrl+Enter` in the editor) moves it to **Completed**, still grouped the same way. Deletes can be undone from the toast.
+- **View as board** (top of the Tasks panel) shows the same tasks in three columns, **To do**, **Doing** and **Done**, in the main area. Drag a card to another column, or use its ⋯ menu (move, open its note, delete). Edit titles right on the card, click the due date to change it, and check a card off to send it to Done. **Show** picks all tasks, standalone tasks, or one note's. Open tasks are ordered by due date, and Done shows the most recently finished first. **Back to notes**, or the button again, returns you to your notes.
 - **Show/hide** works like the sidebar. The panel button at its top right hides it. While it's hidden, a small panel button at the top right of the window shows the number of open tasks; hover it and the panel slides out (click the pin to keep it open), or click it to keep it open. `Ctrl+]` shows or hides it, and `Alt+T` opens it with the cursor in **Add a task**. Your choice is remembered.
 
 **Dates** — type `@date` then plain English (or type `@` and pick **Date**); a picker shows the exact date before you insert it:

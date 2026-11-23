@@ -192,6 +192,13 @@ const DueTaskItem = TaskItem.extend({
         parseHTML: (el) => (/^\d+$/.test(el.getAttribute('data-edited') || '') ? Number(el.getAttribute('data-edited')) : null),
         renderHTML: (attrs) => (attrs.edited ? { 'data-edited': String(attrs.edited) } : {}),
       },
+      // Board column while not done: 'doing', or null = To do. (Done = checked.)
+      stage: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el) => (el.getAttribute('data-stage') === 'doing' ? 'doing' : null),
+        renderHTML: (attrs) => (attrs.stage === 'doing' ? { 'data-stage': 'doing' } : {}),
+      },
     };
   },
 });
@@ -261,9 +268,22 @@ function dueBadges(onTaskOpen) {
           index++;
           const iso = node.attrs.due;
           const first = node.firstChild;
-          if (!iso || !first || first.type.name !== 'paragraph') return true;
+          if (!first || first.type.name !== 'paragraph') return true;
           const at = pos + 1 + first.nodeSize - 1; // end of the to-do's first line
           const i = index;
+          if (node.attrs.stage === 'doing' && !node.attrs.checked) {
+            decos.push(Decoration.widget(at, () => {
+              const el = document.createElement('button');
+              el.type = 'button';
+              el.className = 'task-stage';
+              el.contentEditable = 'false';
+              el.title = 'In the Doing column — click to change it in the Tasks panel';
+              el.textContent = 'Doing';
+              el.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); onTaskOpen?.(i, 'stage'); });
+              return el;
+            }, { side: 1, ignoreSelection: true, key: `stage-${i}` }));
+          }
+          if (!iso) return true;
           const cls = `task-due${node.attrs.checked ? ' done' : iso < today ? ' past' : iso === today ? ' today' : ''}`;
           decos.push(Decoration.widget(at, () => {
             const el = document.createElement('button');
@@ -274,7 +294,7 @@ function dueBadges(onTaskOpen) {
             el.textContent = `Due ${formatDate(iso)}`;
             el.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); onTaskOpen?.(i); });
             return el;
-          }, { side: 1, ignoreSelection: true, key: `due-${i}-${iso}-${cls}` }));
+          }, { side: 2, ignoreSelection: true, key: `due-${i}-${iso}-${cls}` }));
           return true;
         });
         return DecorationSet.create(state.doc, decos);

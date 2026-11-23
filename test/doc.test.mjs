@@ -59,5 +59,16 @@ check('marking again changes nothing', markUndatedTasks(marked.doc).count === 0)
 const before = Date.now();
 const ed = docTasks(updateTask(stamped, 0, { title: 'Dated!' }))[0];
 check('editing in the panel updates edited, keeps created', ed.edited >= before && ed.created === 1700000000000);
+// board column (stage)
+const sd = { type: 'doc', content: [{ type: 'taskList', content: [item({}, p(t('A'))), item({ stage: 'doing' }, p(t('B'))), item({ checked: true, stage: 'doing' }, p(t('C')))] }] };
+const sx = docTasks(sd);
+check('column read: default To do, Doing kept', sx[0].stage === 'todo' && sx[1].stage === 'doing');
+let sdoc = updateTask(sd, 0, { stage: 'doing' });
+check('moved to Doing', docTasks(sdoc)[0].stage === 'doing' && !docTasks(sdoc)[0].done);
+sdoc = updateTask(sdoc, 0, { stage: 'done' });
+check('moved to Done = checked, column remembered', docTasks(sdoc)[0].done && docTasks(sdoc)[0].stage === 'doing');
+sdoc = updateTask(sdoc, 0, { stage: 'todo' });
+check('back to To do: unchecked', !docTasks(sdoc)[0].done && docTasks(sdoc)[0].stage === 'todo');
+check('unchecking a Done task returns it to its column', docTasks(setTaskChecked(sd, 2, false))[2].stage === 'doing');
 console.log(fail ? `${fail} doc test(s) failed, ${pass} passed` : `all ${pass} doc checks passed`);
 if (fail) process.exit(1);

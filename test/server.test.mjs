@@ -158,6 +158,19 @@ try {
   check('due and details can be cleared', r.status === 200 && r.json.due === null && r.json.body === '', r.json);
   r = await c.call('PATCH', '/api/tasks/t1', { text: '   ' });
   check('empty title refused', r.status === 400);
+  // board column
+  r = await c.call('GET', '/api/state');
+  check('new tasks start in To do', r.json.tasks.find((x) => x.id === 't2').stage === 'todo');
+  r = await c.call('PATCH', '/api/tasks/t2', { stage: 'doing' });
+  check('moved to Doing', r.status === 200 && r.json.stage === 'doing' && !r.json.done, r.json);
+  r = await c.call('PATCH', '/api/tasks/t2', { done: true });
+  check('Done keeps the column it came from', r.status === 200 && r.json.done && r.json.stage === 'doing', r.json);
+  r = await c.call('PATCH', '/api/tasks/t2', { done: false, stage: 'todo' });
+  check('back to To do', r.status === 200 && !r.json.done && r.json.stage === 'todo', r.json);
+  r = await c.call('PATCH', '/api/tasks/t2', { stage: 'later' });
+  check('unknown column refused', r.status === 400);
+  r = await c.call('POST', '/api/tasks', { id: 't3', text: 'Started already', stage: 'doing' });
+  check('a task can be created in Doing', r.status === 200 && r.json.stage === 'doing', r.json);
 
   // ---------------------------------------------------------------- wipe safety
   fs.mkdirSync(path.join(tmp, 'images'), { recursive: true });

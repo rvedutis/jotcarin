@@ -19,6 +19,7 @@ function uid() {
 const KEYS = {
   unsaved: 'tk:unsaved', last: 'tk:last', expanded: 'tk:expanded', showCompleted: 'tk:showCompleted',
   sidebarPinned: 'tk:sidebarPinned', tasksPinned: 'tk:tasksPinned', theme: 'tk:theme', shortcuts: 'tk:shortcuts',
+  sidebarWidth: 'tk:sidebarWidth', tasksWidth: 'tk:tasksWidth', boardFilter: 'tk:boardFilter',
 };
 // One-time carry-over from the app's earlier names — Jotcairn ("jc:" keys) and Actionbase ("ab:") —
 // including the journal of unsaved edits. The newest old value wins; old keys are removed once copied.
@@ -188,6 +189,7 @@ const P = {
   columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  board: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/>',
   arrowUp: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
   arrowDown: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
   panelRightClose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>',
@@ -1096,6 +1098,12 @@ function route() {
   flushNotes();
   const m = /^#\/note\/([\w-]+)$/.exec(location.hash);
   const search = $('#search');
+  if (location.hash === '#/board') {
+    if (search.value && !opts.keepSearch) search.value = '';
+    if (S.view.type === 'board') { renderBoard(); return; }
+    showBoard();
+    return;
+  }
   if (m && S.notes.has(m[1])) {
     if (search.value && !opts.keepSearch) search.value = '';
     if (S.view.type === 'note' && S.view.id === m[1] && !opts.focusTitle && !opts.find && opts.task == null) { renderTree(); return; }
@@ -1119,9 +1127,10 @@ const viewCleanups = [];
 function setView(v) {
   while (viewCleanups.length) { try { viewCleanups.pop()(); } catch { /* ignore */ } }
   S.view = v;
+  $('#tp-board')?.classList.toggle('on', v.type === 'board');
+  $('#tp-board')?.setAttribute('aria-pressed', String(v.type === 'board'));
   if (v.type === 'note') store.set(KEYS.last, location.hash);
-  $('#nav-scratch').classList.toggle('active', v.type === 'note' && isScratch(v.id));
-  document.title = v.type === 'note' ? `${noteTitle(S.notes.get(v.id))} · Taskule` : v.type === 'search' ? 'Search · Taskule' : 'Taskule';
+  document.title = v.type === 'note' ? `${noteTitle(S.notes.get(v.id))} · Taskule` : v.type === 'search' ? 'Search · Taskule' : v.type === 'board' ? 'Board · Taskule' : 'Taskule';
 }
 
 function mobileBar(title) {
@@ -1132,6 +1141,7 @@ function refreshAll() {
   renderTree();
   renderTodoCount();
   renderTaskPanel();
+  if (S.view.type === 'board') renderBoard();
   if (S.view.type === 'search') renderSearchResults();
   else if (S.view.type === 'note') renderCrumbs();
 }
@@ -1144,10 +1154,6 @@ function renderTodoCount() {
   for (const n of S.notes.values()) for (const t of noteTasks(n)) if (!t.done) open++;
   $('#tp-count').textContent = open ? String(open) : '';
   $('#tp-handle-count').textContent = open ? String(open) : '';
-  const sp = S.notes.get(SCRATCH);
-  const spOpen = sp ? noteTasks(sp).filter((t) => !t.done).length : 0;
-  $('#scratch-count').textContent = spOpen ? String(spOpen) : '';
-  $('#scratch-count').title = spOpen ? `${plural(spOpen, 'open to-do')} in the Scratchpad` : '';
 }
 
 function renderTree() {
@@ -1162,7 +1168,7 @@ function renderTree() {
     kids.get(k).push(f);
   }
   for (const n of S.notes.values()) {
-    if (isScratch(n.id)) continue; // shown as its own entry above the tree
+    if (isScratch(n.id)) continue; // shown as its own pinned row at the top of the tree
     const k = n.folderId && S.folders.has(n.folderId) ? n.folderId : null;
     if (!notesBy.has(k)) notesBy.set(k, []);
     notesBy.get(k).push(n);
@@ -1202,7 +1208,15 @@ function renderTree() {
     return h;
   };
   const html = level(null, 0);
-  tree.innerHTML = html || `<div class="tree-empty">No notes yet.<br><button data-tact="first-note">Create your first note</button></div>`;
+  const sp = S.notes.get(SCRATCH);
+  const spOpen = sp ? noteTasks(sp).filter((t) => !t.done).length : 0;
+  const scratchRow = sp ? `<div class="tree-row scratch-row${activeNote === SCRATCH ? ' active' : ''}" data-kind="scratch" data-id="${SCRATCH}" tabindex="0" role="treeitem" title="Scratchpad: quick notes and to-dos to sort later${esc(shortcuts.hint('scratch'))}">
+      <span class="row-icon">${I.sticky}</span>
+      <span class="row-label">Scratchpad</span>
+      ${spOpen ? `<span class="row-badge" title="${plural(spOpen, 'open to-do')}">${spOpen}</span>` : ''}
+      <span class="scratch-pin" title="Always at the top">${I.pin}</span>
+    </div>` : '';
+  tree.innerHTML = scratchRow + (html || `<div class="tree-empty">No notes yet.<br><button data-tact="first-note">Create your first note</button></div>`);
   $('#tree-root').classList.toggle('selected', !S.selectedFolderId);
   const target = S.selectedFolderId ? S.folders.get(S.selectedFolderId)?.name : null;
   $('#new-note').title = target ? `New note in “${target}”${shortcuts.hint('newNote')}` : `New note${shortcuts.hint('newNote')}`;
@@ -1299,6 +1313,7 @@ function setupTree() {
     const row = e.target.closest('.tree-row');
     if (!row || S.renaming === row.dataset.id) return;
     const { kind, id } = row.dataset;
+    if (kind === 'scratch') { openScratchpad(); return; }
     if (tact === 'menu') {
       const r = e.target.closest('button').getBoundingClientRect();
       rowMenu(row, { x: r.left, y: r.bottom + 4 });
@@ -1321,7 +1336,7 @@ function setupTree() {
   });
   tree.addEventListener('contextmenu', (e) => {
     const row = e.target.closest('.tree-row');
-    if (!row || S.renaming) return;
+    if (!row || S.renaming || row.dataset.kind === 'scratch') return;
     e.preventDefault();
     rowMenu(row, { x: e.clientX, y: e.clientY });
   });
@@ -1331,6 +1346,8 @@ function setupTree() {
     const rows = $$('.tree-row', tree);
     const i = rows.indexOf(row);
     const { kind, id } = row.dataset;
+    if (kind === 'scratch' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openScratchpad(); return; }
+    if (kind === 'scratch' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return; // pinned: no move/rename/delete
     if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); nudgeItem(kind, id, e.key === 'ArrowUp' ? -1 : 1); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); rows[i + 1]?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); rows[i - 1]?.focus(); }
@@ -1357,6 +1374,7 @@ function setupTree() {
   const dropAt = (e) => {
     if (!drag) return null;
     const row = e.target.closest('.tree-row');
+    if (row?.dataset.kind === 'scratch') return null; // the Scratchpad stays pinned at the top
     if (!row) return { parent: null, ref: null, where: 'end', row: null, cls: 'root' };
     const r = row.getBoundingClientRect();
     const y = (e.clientY - r.top) / r.height;
@@ -1384,7 +1402,7 @@ function setupTree() {
   };
   tree.addEventListener('dragstart', (e) => {
     const row = e.target.closest?.('.tree-row');
-    if (!row || S.renaming) { e.preventDefault(); return; }
+    if (!row || S.renaming || row.dataset.kind === 'scratch') { e.preventDefault(); return; }
     drag = { kind: row.dataset.kind, id: row.dataset.id };
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData(DT, `${drag.kind}:${drag.id}`);
@@ -1513,6 +1531,16 @@ function taskRow(t, { kind, note, terms, source }) {
   </li>`;
 }
 
+/** Board column of a task: 'todo' | 'doing' | 'done' (Done = checked). */
+const stageOf = (t) => (t.done ? 'done' : t.stage === 'doing' ? 'doing' : 'todo');
+const STAGES = [['todo', 'To do'], ['doing', 'Doing'], ['done', 'Done']];
+const stageLabel = (st) => STAGES.find(([k]) => k === st)[1];
+function stageChip(t) {
+  if (t.done) return '';
+  const st = stageOf(t);
+  return `<button type="button" class="tp-stage ${st}" data-act="stage" title="Column on the board: ${stageLabel(st)} (click to move)">${stageLabel(st)}</button>`;
+}
+
 function tpRow(t, { kind, note, from = false }) {
   const attrs = kind === 's'
     ? `data-kind="s" data-id="${t.id}"`
@@ -1529,10 +1557,10 @@ function tpRow(t, { kind, note, from = false }) {
   return `<li class="tp-task${t.done ? ' done' : ''}" ${attrs}>
     <button class="check" role="checkbox" aria-checked="${t.done}" data-act="toggle" title="${t.done ? 'Mark as not done' : 'Mark as done'}">${I.check}</button>
     <div class="tp-main">
-      <div class="tp-line"><div class="tp-title" contenteditable="plaintext-only" spellcheck="true" role="textbox" aria-label="Task" data-plain="${esc(t.text)}">${titleHtml}</div>${kind === 's' ? addedHtml(t.createdAt, t.updatedAt) : addedHtml(t.created, t.edited)}</div>
+      <div class="tp-title" contenteditable="plaintext-only" spellcheck="true" role="textbox" aria-label="Task" data-plain="${esc(t.text)}">${titleHtml}</div>
       ${from ? `<div class="tp-from">${kind === 'n' ? `in <button type="button" data-act="open-note" data-note="${note.id}">${esc(noteTitle(note))}</button>` : 'Standalone task'}</div>` : ''}
       ${details}
-      <div class="tp-meta">${due}</div>
+      <div class="tp-meta">${stageChip(t)}${due}${kind === 's' ? addedHtml(t.createdAt, t.updatedAt) : addedHtml(t.created, t.edited)}</div>
     </div>
     <div class="tp-actions">
       ${canAddDetails ? `<button type="button" class="icon-btn sm" data-act="add-details" title="Add details">${I.text}</button>` : ''}
@@ -1600,8 +1628,10 @@ function dueSoonHtml(open) {
 /** Is something in the panel being edited right now? (Then re-rendering waits until it's done.) */
 function taskEditing() {
   const a = document.activeElement;
-  return (a && $('#tp-body').contains(a) && (a.classList.contains('tp-title') || a.classList.contains('tp-details'))) || !$('#due-pop').hidden;
+  return (a && a.closest?.('.tp-task') && (a.classList.contains('tp-title') || a.classList.contains('tp-details'))) || !$('#due-pop').hidden;
 }
+/** Redraw everything that lists tasks (the panel, and the board when it's open). */
+function renderTaskViews() { renderTaskPanel(); renderBoard(); }
 
 function renderTaskPanel() {
   const box = $('#tp-body');
@@ -1629,7 +1659,7 @@ function renderTaskPanel() {
   box.innerHTML = h;
   $$('.tp-details', box).forEach(autosize);
 }
-const renderTaskPanelSoon = debounce(() => { renderTaskPanel(); renderTodoCount(); }, 320);
+const renderTaskPanelSoon = debounce(() => { renderTaskViews(); renderTodoCount(); }, 320);
 function autosize(ta) { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px`; }
 
 function resolveRow(li) {
@@ -1695,11 +1725,17 @@ function commitTask(li, patch) {
   if (!r) { toast('That task changed somewhere else — the list was refreshed.', { type: 'error' }); refreshAll(); return false; }
   if (r.kind === 's') {
     const t = r.task;
+    if (patch.stage !== undefined) {
+      const wasDone = t.done;
+      t.done = patch.stage === 'done';
+      if (patch.stage !== 'done') t.stage = patch.stage;
+      if (t.done !== wasDone) t.completedAt = t.done ? Date.now() : null;
+    }
     if (patch.title !== undefined) t.text = patch.title;
     if (patch.body !== undefined) t.body = patch.body;
     if (patch.due !== undefined) t.due = patch.due || null;
     t.updatedAt = Date.now();
-    sync.push({ method: 'PATCH', url: `/api/tasks/${t.id}`, body: { text: t.text, body: t.body || '', due: t.due || null }, key: `task:${t.id}` });
+    sync.push({ method: 'PATCH', url: `/api/tasks/${t.id}`, body: { text: t.text, body: t.body || '', due: t.due || null, stage: t.stage === 'doing' ? 'doing' : 'todo', done: !!t.done }, key: `task:${t.id}` });
   } else {
     const doc = updateTask(noteInfo(r.note).doc, r.t.index, patch);
     if (!doc) {
@@ -1714,18 +1750,39 @@ function commitTask(li, patch) {
   return true;
 }
 
+/** Move a task to a board column (To do / Doing / Done). */
+function moveToStage(li, st) {
+  const r = resolveRow(li);
+  if (!r) { refreshAll(); return; }
+  const from = r.kind === 's' ? stageOf(r.task) : stageOf(r.t);
+  if (from === st) return;
+  if (!commitTask(li, { stage: st })) return;
+  if (st === 'done' || from === 'done') li.classList.add(st === 'done' ? 'completing' : 'reopening');
+  renderTodoCount();
+  renderTaskPanelSoon();
+}
+function stageMenu(li, anchor) {
+  const r = resolveRow(li);
+  if (!r) return;
+  const cur = r.kind === 's' ? stageOf(r.task) : stageOf(r.t);
+  const a = (anchor || li).getBoundingClientRect();
+  showMenu({ x: a.left, y: a.bottom + 4 }, STAGES.map(([k, label]) => ({
+    label: k === cur ? `${label}  ✓` : label, icon: k === 'done' ? I.check : k === 'doing' ? I.board : I.listTodo, run: () => moveToStage(li, k),
+  })));
+}
+
 function addTask(text) {
   text = text.trim().slice(0, 2000);
   if (!text) return;
   const now = Date.now();
-  const t = { id: uid(), text, body: '', due: null, done: false, createdAt: now, completedAt: null, updatedAt: now };
+  const t = { id: uid(), text, body: '', due: null, stage: 'todo', done: false, createdAt: now, completedAt: null, updatedAt: now };
   S.tasks.set(t.id, t);
   sync.push({ method: 'POST', url: '/api/tasks', body: { id: t.id, text } });
   refreshAll();
 }
 
 /** Open the panel and bring a task into view (optionally opening its due-date picker). */
-function revealTask(selector, { due = false, focus = false } = {}) {
+function revealTask(selector, { due = false, focus = false, stage = false } = {}) {
   tasksPanel.open();
   let li = $(`#tp-body ${selector}`);
   if (!li && !S.showCompleted) {
@@ -1740,6 +1797,7 @@ function revealTask(selector, { due = false, focus = false } = {}) {
   void li.offsetWidth;
   li.classList.add('flash');
   if (due) duePicker.open(li, $('.tp-due', li));
+  else if (stage) stageMenu(li, $('.tp-stage', li));
   else if (focus) $('.tp-title', li)?.focus();
 }
 
@@ -1829,93 +1887,247 @@ const tasksPanel = {
       input.focus();
     });
 
-    const body = $('#tp-body');
-    body.addEventListener('click', (e) => {
-      const el = e.target.closest('[data-act]');
-      if (!el || !body.contains(el)) return;
-      const li = el.closest('.tp-task');
-      switch (el.dataset.act) {
-        case 'toggle': toggleRow(li); break;
-        case 'delete': deleteRow(li); break;
-        case 'due': duePicker.open(li, $('.tp-due', li) || el); break;
-        case 'add-details': {
-          li.classList.add('adding');
-          $('.tp-details', li)?.focus();
-          break;
-        }
-        case 'open-note': navigate(`#/note/${el.dataset.note}`); break;
-        case 'open-task': {
-          const r = resolveRow(li);
-          if (r?.kind === 'n') navigate(`#/note/${r.note.id}`, { task: r.t.index });
-          break;
-        }
-        case 'toggle-completed':
-          S.showCompleted = !S.showCompleted;
-          store.set(KEYS.showCompleted, S.showCompleted);
-          renderTaskPanel();
-          break;
-        default: break;
-      }
-    });
-
-    // ---- inline editing: title
-    body.addEventListener('focusin', (e) => {
-      const el = e.target;
-      if (el.classList?.contains('tp-title') && !el.dataset.editing) {
-        el.dataset.editing = '1';
-        el.textContent = el.dataset.plain; // edit as plain text (dates appear as "Fri, Nov 20, 2026")
-        const sel = getSelection();
-        sel.selectAllChildren(el);
-        sel.collapseToEnd();
-      }
-    });
-    body.addEventListener('keydown', (e) => {
-      const el = e.target;
-      if (el.classList?.contains('tp-title')) {
-        if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); el.blur(); }
-        else if (e.key === 'Escape') { e.preventDefault(); el.dataset.cancel = '1'; el.blur(); }
-        e.stopPropagation(); // don't trigger app shortcuts while typing
-      } else if (el.classList?.contains('tp-details')) {
-        if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
-        e.stopPropagation();
-      }
-    });
-    body.addEventListener('focusout', (e) => {
-      const el = e.target;
-      const li = el.closest?.('.tp-task');
-      if (el.classList?.contains('tp-title')) {
-        const cancel = el.dataset.cancel === '1';
-        delete el.dataset.cancel;
-        delete el.dataset.editing;
-        const v = el.textContent.replace(/\s+/g, ' ').trim();
-        if (!cancel && v && v !== el.dataset.plain && li) {
-          if (commitTask(li, { title: v })) el.dataset.plain = v;
-        }
-        setTimeout(() => { if (!taskEditing()) renderTaskPanel(); });
-      } else if (el.classList?.contains('tp-details')) {
-        li?.classList.remove('adding');
-        clearTimeout(el._save);
-        if (li && el.dataset.changed) { delete el.dataset.changed; commitTask(li, { body: el.value }); }
-        setTimeout(() => { if (!taskEditing()) renderTaskPanel(); });
-      }
-    });
-    // ---- inline editing: details (saved as you type, and when you leave the box)
-    body.addEventListener('input', (e) => {
-      const el = e.target;
-      if (!el.classList?.contains('tp-details')) return;
-      el.classList.toggle('empty', !el.value);
-      autosize(el);
-      el.dataset.changed = '1';
-      clearTimeout(el._save);
-      el._save = setTimeout(() => {
-        const li = el.closest('.tp-task');
-        if (li && el.dataset.changed) { delete el.dataset.changed; commitTask(li, { body: el.value }); }
-      }, 700);
-    });
+    wireTaskList($('#tp-body'));
+    $('#tp-board').innerHTML = `${I.board}<span>View as board</span>`;
+    $('#tp-board').addEventListener('click', () => (S.view.type === 'board' ? navigate(store.get(KEYS.last, HOME)) : navigate('#/board')));
   },
 };
 
-/** The due-date picker: type plain English ("next fri"), pick a suggestion, or use the calendar. */
+/**
+ * Clicks and inline editing for a list of tasks (the Tasks panel, or the board): check off,
+ * delete, due date, column, details, and editing titles and details in place.
+ */
+function wireTaskList(body) {
+  body.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-act]');
+    if (!el || !body.contains(el)) return;
+    const li = el.closest('.tp-task');
+    switch (el.dataset.act) {
+      case 'toggle': toggleRow(li); break;
+      case 'delete': deleteRow(li); break;
+      case 'due': duePicker.open(li, $('.tp-due', li) || el); break;
+      case 'stage': stageMenu(li, el); break;
+      case 'card-menu': cardMenu(li, el); break;
+      case 'add-details': {
+        li.classList.add('adding');
+        $('.tp-details', li)?.focus();
+        break;
+      }
+      case 'open-note': navigate(`#/note/${el.dataset.note}`); break;
+      case 'open-task': {
+        const r = resolveRow(li);
+        if (r?.kind === 'n') navigate(`#/note/${r.note.id}`, { task: r.t.index });
+        break;
+      }
+      case 'toggle-completed':
+        S.showCompleted = !S.showCompleted;
+        store.set(KEYS.showCompleted, S.showCompleted);
+        renderTaskPanel();
+        break;
+      default: break;
+    }
+  });
+
+  // ---- inline editing: title
+  body.addEventListener('focusin', (e) => {
+    const el = e.target;
+    if (el.classList?.contains('tp-title') && !el.dataset.editing) {
+      el.dataset.editing = '1';
+      el.closest('[draggable]')?.setAttribute('draggable', 'false'); // a card being edited doesn't drag
+      el.textContent = el.dataset.plain; // edit as plain text (dates appear as "Fri, Nov 20, 2026")
+      const sel = getSelection();
+      sel.selectAllChildren(el);
+      sel.collapseToEnd();
+    }
+  });
+  body.addEventListener('keydown', (e) => {
+    const el = e.target;
+    if (el.classList?.contains('tp-title')) {
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); el.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); el.dataset.cancel = '1'; el.blur(); }
+      e.stopPropagation(); // don't trigger app shortcuts while typing
+    } else if (el.classList?.contains('tp-details')) {
+      if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+      e.stopPropagation();
+    }
+  });
+  body.addEventListener('focusout', (e) => {
+    const el = e.target;
+    const li = el.closest?.('.tp-task');
+    if (el.classList?.contains('tp-title')) {
+      const cancel = el.dataset.cancel === '1';
+      delete el.dataset.cancel;
+      delete el.dataset.editing;
+      const v = el.textContent.replace(/\s+/g, ' ').trim();
+      if (!cancel && v && v !== el.dataset.plain && li) {
+        if (commitTask(li, { title: v })) el.dataset.plain = v;
+      }
+      setTimeout(() => { if (!taskEditing()) renderTaskViews(); });
+    } else if (el.classList?.contains('tp-details')) {
+      li?.classList.remove('adding');
+      clearTimeout(el._save);
+      if (li && el.dataset.changed) { delete el.dataset.changed; commitTask(li, { body: el.value }); }
+      setTimeout(() => { if (!taskEditing()) renderTaskViews(); });
+    }
+  });
+  // ---- inline editing: details (saved as you type, and when you leave the box)
+  body.addEventListener('input', (e) => {
+    const el = e.target;
+    if (!el.classList?.contains('tp-details')) return;
+    el.classList.toggle('empty', !el.value);
+    autosize(el);
+    el.dataset.changed = '1';
+    clearTimeout(el._save);
+    el._save = setTimeout(() => {
+      const li = el.closest('.tp-task');
+      if (li && el.dataset.changed) { delete el.dataset.changed; commitTask(li, { body: el.value }); }
+    }, 700);
+  });
+}
+
+/* ------------------------------------------------------------- board view */
+/**
+ * The same tasks as columns: To do, Doing, Done. Drag a card to another column (or use its
+ * menu); check it off to send it to Done. Edits happen right on the card, like in the list.
+ */
+const BOARD_DONE_LIMIT = 40;
+function boardCard(t, { kind, note }) {
+  const attrs = kind === 's'
+    ? `data-kind="s" data-id="${t.id}"`
+    : `data-kind="n" data-note="${note.id}" data-index="${t.index}" data-text="${esc(t.text)}"`;
+  const titleHtml = kind === 's' ? plainTaskHtml(t.text, { done: t.done }) : inlineHtml(t.nodes, { done: t.done });
+  const body = (t.body || '').trim();
+  const due = t.due ? `<button type="button" class="tp-due ${dueClass(t.due)}" data-act="due" title="Due ${esc(formatDate(t.due))} — click to change">${I.calendar}<span>${esc(dueLabel(t.due))}</span></button>` : '';
+  return `<li class="tp-task board-card${t.done ? ' done' : ''}" ${attrs} draggable="true">
+    <div class="bc-top">
+      <button class="check" role="checkbox" aria-checked="${t.done}" data-act="toggle" title="${t.done ? 'Mark as not done' : 'Mark as done'}">${I.check}</button>
+      <div class="tp-title" contenteditable="plaintext-only" spellcheck="true" role="textbox" aria-label="Task" data-plain="${esc(t.text)}">${titleHtml}</div>
+      <button type="button" class="icon-btn sm bc-more" data-act="card-menu" title="Move, open or delete">${I.more}</button>
+    </div>
+    ${body ? `<div class="bc-details">${esc(body)}</div>` : ''}
+    <div class="tp-meta">${kind === 'n' ? `<button type="button" class="bc-from" data-act="open-note" data-note="${note.id}">${isScratch(note.id) ? I.sticky : I.note}<span>${esc(noteTitle(note))}</span></button>` : `<span class="bc-from standalone">${I.inbox}<span>Standalone</span></span>`}${due}${kind === 's' ? addedHtml(t.createdAt, t.updatedAt) : addedHtml(t.created, t.edited)}</div>
+  </li>`;
+}
+function cardMenu(li, anchor) {
+  const r = resolveRow(li);
+  if (!r) return;
+  const cur = r.kind === 's' ? stageOf(r.task) : stageOf(r.t);
+  const a = anchor.getBoundingClientRect();
+  showMenu({ x: a.right - 200, y: a.bottom + 4 }, [
+    ...STAGES.filter(([k]) => k !== cur).map(([k, label]) => ({ label: `Move to ${label}`, icon: k === 'done' ? I.check : I.board, run: () => moveToStage(li, k) })),
+    ...(r.kind === 'n' ? [{ label: `Open “${noteTitle(r.note)}”`, icon: I.note, run: () => navigate(`#/note/${r.note.id}`, { task: r.t.index }) }] : []),
+    { label: 'Edit details in the Tasks panel', icon: I.text, run: () => revealTask(r.kind === 's' ? `[data-kind="s"][data-id="${r.task.id}"]` : `[data-kind="n"][data-note="${r.note.id}"][data-index="${r.t.index}"]`, { focus: true }) },
+    'sep',
+    { label: 'Delete', icon: I.trash, danger: true, run: () => deleteRow(li) },
+  ]);
+}
+
+/** Which tasks the board shows: all, standalone only, or one note's. */
+function boardSources(c) {
+  const notes = new Map();
+  for (const g of [...c.open.notes, ...c.done.notes]) notes.set(g.note.id, g.note);
+  return [...notes.values()];
+}
+function renderBoard() {
+  const root = $('#board');
+  if (!root || S.view.type !== 'board') return;
+  if (taskEditing() || root.dataset.dragging) { tasksPanel.dirty = true; return; }
+  const c = collectTasks();
+  const filter = store.get(KEYS.boardFilter, '');
+  const want = (kind, note) => !filter || (filter === 's' ? kind === 's' : kind === 'n' && note.id === filter);
+  const cols = { todo: [], doing: [], done: [] };
+  for (const t of c.open.standalone) if (want('s')) cols[stageOf(t)].push({ t, kind: 's' });
+  for (const { note, tasks } of c.open.notes) for (const t of tasks) if (want('n', note)) cols[stageOf(t)].push({ t, kind: 'n', note });
+  for (const t of c.done.standalone) if (want('s')) cols.done.push({ t, kind: 's', when: t.completedAt || t.updatedAt || 0 });
+  for (const { note, tasks } of c.done.notes) for (const t of tasks) if (want('n', note)) cols.done.push({ t, kind: 'n', note, when: t.edited || 0 });
+  const added = (x) => (x.kind === 's' ? x.t.createdAt : x.t.created) || 0;
+  const openOrder = (a, b) => (a.t.due || '9999').localeCompare(b.t.due || '9999') || added(b) - added(a);
+  cols.todo.sort(openOrder);
+  cols.doing.sort(openOrder);
+  cols.done.sort((a, b) => b.when - a.when);
+  const doneTotal = cols.done.length;
+  cols.done = cols.done.slice(0, BOARD_DONE_LIMIT);
+
+  const sel = $('#board-filter');
+  const sources = boardSources(c);
+  if (filter && filter !== 's' && !sources.some((n) => n.id === filter)) store.set(KEYS.boardFilter, '');
+  sel.innerHTML = `<option value="">All tasks</option><option value="s">Standalone tasks</option>${sources.map((n) => `<option value="${n.id}">${esc(noteTitle(n))}</option>`).join('')}`;
+  sel.value = store.get(KEYS.boardFilter, '');
+  $('#board-sub').textContent = `${cols.todo.length} to do · ${cols.doing.length} doing · ${doneTotal} done`;
+
+  for (const [k] of STAGES) {
+    const list = $(`.board-col[data-stage="${k}"] .board-list`, root);
+    $(`.board-col[data-stage="${k}"] .bcol-count`, root).textContent = k === 'done' ? String(doneTotal) : String(cols[k].length);
+    list.innerHTML = cols[k].length
+      ? cols[k].map((x) => boardCard(x.t, x)).join('') + (k === 'done' && doneTotal > cols.done.length ? `<li class="board-more">${doneTotal - cols.done.length} older in Completed (Tasks panel)</li>` : '')
+      : `<li class="board-empty">${k === 'todo' ? 'Nothing to do here' : k === 'doing' ? 'Drag a card here when you start it' : 'Finished tasks land here'}</li>`;
+  }
+}
+function showBoard() {
+  teardownNote();
+  setView({ type: 'board' });
+  main.innerHTML = `${mobileBar('Board')}
+    <div class="board-view" id="board">
+      <header class="board-head">
+        <div class="page-icon purple">${I.board}</div>
+        <div class="board-titles"><h1>Board</h1><p class="page-sub" id="board-sub"></p></div>
+        <label class="board-filter-wrap">Show <select id="board-filter" aria-label="Which tasks"></select></label>
+        <button type="button" class="btn" id="board-close">${I.panelClose}<span>Back to notes</span></button>
+      </header>
+      <div class="board-cols">
+        ${STAGES.map(([k, label]) => `<section class="board-col ${k}" data-stage="${k}">
+          <h2 class="bcol-head"><span class="dot"></span>${label}<span class="bcol-count"></span></h2>
+          <ul class="board-list"></ul>
+        </section>`).join('')}
+      </div>
+    </div>`;
+  const root = $('#board');
+  wireTaskList(root);
+  $('#board-filter').addEventListener('change', (e) => { store.set(KEYS.boardFilter, e.target.value); renderBoard(); });
+  $('#board-close').addEventListener('click', () => navigate(store.get(KEYS.last, HOME)));
+  // ---- drag a card to another column
+  let dragged = null;
+  root.addEventListener('dragstart', (e) => {
+    const card = e.target.closest?.('.board-card');
+    if (!card) return;
+    dragged = card;
+    root.dataset.dragging = '1';
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-taskule-card', '1');
+    requestAnimationFrame(() => card.classList.add('dragging'));
+  });
+  root.addEventListener('dragover', (e) => {
+    const col = e.target.closest('.board-col');
+    if (!dragged || !col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    $$('.board-col.drop', root).forEach((x) => x !== col && x.classList.remove('drop'));
+    col.classList.add('drop');
+  });
+  root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) $$('.board-col.drop', root).forEach((x) => x.classList.remove('drop')); });
+  root.addEventListener('drop', (e) => {
+    const col = e.target.closest('.board-col');
+    if (!dragged || !col) return;
+    e.preventDefault();
+    const card = dragged;
+    dragged = null;
+    delete root.dataset.dragging;
+    $$('.board-col.drop', root).forEach((x) => x.classList.remove('drop'));
+    moveToStage(card, col.dataset.stage);
+    renderBoard();
+  });
+  root.addEventListener('dragend', () => {
+    dragged = null;
+    delete root.dataset.dragging;
+    $$('.board-col.drop, .board-card.dragging', root).forEach((x) => x.classList.remove('drop', 'dragging'));
+    renderBoard();
+  });
+  renderTree();
+  renderBoard();
+  $('#tp-board')?.classList.add('on');
+}
+
+/** The due-date picker:/** The due-date picker: type plain English ("next fri"), pick a suggestion, or use the calendar. */
 const duePicker = {
   li: null,
   kb: 0,
@@ -2398,7 +2610,7 @@ function openNote(id, opts = {}) {
     onImageRequest: pickImages,
     onImageError: (msg) => toast(msg, { type: 'error', timeout: 9000 }),
     onSelectionChange: syncToolbar,
-    onTaskOpen: (index) => revealTask(`[data-kind="n"][data-note="${id}"][data-index="${index}"]`, { due: true }),
+    onTaskOpen: (index, what) => revealTask(`[data-kind="n"][data-note="${id}"][data-index="${index}"]`, what === 'stage' ? { stage: true } : { due: true }),
   });
   editor.on('blur', flushNotes);
   renderCrumbs();
@@ -2882,7 +3094,6 @@ function runShortcut(id) {
 /** Tooltips and hints that mention a shortcut follow your settings. */
 function refreshShortcutHints() {
   const set = (sel, text) => { const el = $(sel); if (el) el.title = text; };
-  set('#nav-scratch', `Scratchpad — quick notes and to-dos to sort later${shortcuts.hint('scratch')}`);
   set('#sb-handle', `Show the sidebar — click to keep it open${shortcuts.hint('sidebar')}`);
   set('#tp-handle', `Tasks — click to keep the panel open${shortcuts.hint('toggleTasks')}`);
   set('#settings-btn', `Settings${shortcuts.hint('settings')}`);
@@ -3080,6 +3291,79 @@ function openSidebar() {
 }
 function closeSidebar() { $('#app').classList.remove('sidebar-open'); }
 
+/**
+ * Drag the inner edge of the sidebar or the Tasks panel to resize it (arrow keys work when the
+ * edge has focus; double-click resets). Widths are remembered. Each panel keeps a sensible
+ * minimum, and the page in the middle always keeps at least MAIN_MIN pixels.
+ */
+const panelSizes = {
+  MAIN_MIN: 380,
+  panels: {
+    sidebar: { cssVar: '--sidebar-w', key: KEYS.sidebarWidth, def: 284, min: 210, max: 520, el: '#sidebar', handle: '#sb-resizer', side: 'left' },
+    tasks: { cssVar: '--tasks-w', key: KEYS.tasksWidth, def: 360, min: 280, max: 640, el: '#taskpanel', handle: '#tp-resizer', side: 'right' },
+  },
+  width(name) { return $(this.panels[name].el).getBoundingClientRect().width || this.panels[name].def; },
+  /** Largest width this panel can take right now without squeezing the page below MAIN_MIN. */
+  maxFor(name) {
+    const p = this.panels[name];
+    const other = name === 'sidebar' ? 'tasks' : 'sidebar';
+    const otherTakesSpace = other === 'sidebar' ? sidebar.pinned : tasksPanel.pinned;
+    const room = innerWidth - this.MAIN_MIN - (otherTakesSpace ? this.width(other) : 0);
+    return Math.max(p.min, Math.min(p.max, room));
+  },
+  set(name, w, { save = true } = {}) {
+    const p = this.panels[name];
+    const clamped = Math.round(Math.max(p.min, Math.min(this.maxFor(name), w)));
+    document.documentElement.style.setProperty(p.cssVar, `${clamped}px`);
+    const h = $(p.handle);
+    h.setAttribute('aria-valuenow', String(clamped));
+    h.setAttribute('aria-valuemin', String(p.min));
+    h.setAttribute('aria-valuemax', String(this.maxFor(name)));
+    if (save) store.set(p.key, clamped);
+    return clamped;
+  },
+  setup() {
+    for (const [name, p] of Object.entries(this.panels)) {
+      const saved = Number(store.get(p.key, p.def));
+      this.set(name, Number.isFinite(saved) ? saved : p.def, { save: false });
+      const h = $(p.handle);
+      h.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || !isDesktop()) return;
+        e.preventDefault();
+        try { h.setPointerCapture(e.pointerId); } catch { /* keep going without capture */ }
+        h.classList.add('active');
+        document.body.classList.add('resizing');
+        const move = (ev) => this.set(name, p.side === 'left' ? ev.clientX : innerWidth - ev.clientX, { save: false });
+        const up = (ev) => {
+          try { h.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
+          h.removeEventListener('pointermove', move);
+          h.removeEventListener('pointerup', up);
+          h.removeEventListener('pointercancel', up);
+          h.classList.remove('active');
+          document.body.classList.remove('resizing');
+          this.set(name, this.width(name));
+        };
+        h.addEventListener('pointermove', move);
+        h.addEventListener('pointerup', up);
+        h.addEventListener('pointercancel', up);
+      });
+      h.addEventListener('dblclick', () => this.set(name, p.def));
+      h.addEventListener('keydown', (e) => {
+        const step = e.shiftKey ? 48 : 16;
+        const grow = p.side === 'left' ? 'ArrowRight' : 'ArrowLeft';
+        const shrink = p.side === 'left' ? 'ArrowLeft' : 'ArrowRight';
+        if (e.key === grow) { e.preventDefault(); this.set(name, this.width(name) + step); }
+        else if (e.key === shrink) { e.preventDefault(); this.set(name, this.width(name) - step); }
+        else if (e.key === 'Home' || e.key === 'Enter') { e.preventDefault(); this.set(name, p.def); }
+      });
+    }
+    // A smaller window: keep both panels within bounds (without forgetting your preferred width).
+    addEventListener('resize', () => {
+      for (const [name, p] of Object.entries(this.panels)) this.set(name, Number(store.get(p.key, p.def)) || p.def, { save: false });
+    });
+  },
+};
+
 const sidebar = {
   pinned: store.get(KEYS.sidebarPinned, true) !== false,
   hovering: false,
@@ -3151,6 +3435,7 @@ function setupChrome() {
   shortcuts.load();
   theme.setup();
   sidebar.setup();
+  panelSizes.setup();
   tasksPanel.setup();
   duePicker.setup();
   $('.search-icon').innerHTML = I.search;
@@ -3170,8 +3455,6 @@ function setupChrome() {
     ]);
   });
   refreshShortcutHints();
-  $('#nav-scratch .nav-icon').innerHTML = I.sticky;
-  $('#nav-scratch').addEventListener('click', () => openScratchpad());
   $('#new-note').addEventListener('click', () => createNote());
   $('#new-folder').addEventListener('click', () => newFolderAction());
   $('#tree-root').addEventListener('click', () => { S.selectedFolderId = null; renderTree(); });
@@ -3307,10 +3590,8 @@ async function boot() {
   markOldTasksUndated();
   recoverUnsavedEdits();
   health.start();
-  if (!location.hash || location.hash === '#') {
-    const last = store.get(KEYS.last, HOME);
-    history.replaceState(null, '', last);
-  }
+  // Taskule always opens on the Scratchpad (a link straight to a note still opens that note).
+  if (!location.hash || location.hash === '#') history.replaceState(null, '', HOME);
   renderTodoCount();
   renderTaskPanel();
   route();

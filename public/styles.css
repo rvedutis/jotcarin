@@ -957,9 +957,8 @@ dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(2px); }
 .btn-settings:hover { color: var(--blue); background: var(--blue-soft); }
 .btn-settings svg.i { width: 17px; height: 17px; }
 /* task title line with its ghosted "Added …" date */
-.tp-line { display: flex; align-items: flex-start; gap: 8px; }
-.tp-line .tp-title { flex: 1; min-width: 0; }
-.tp-added { flex: none; margin-top: 3px; font-size: 11px; color: var(--faint); opacity: .75; white-space: nowrap; cursor: default; }
+/* the ghosted "Added …" date, in small type under the task */
+.tp-added { font-size: 10px; line-height: 1.3; color: var(--faint); opacity: .8; white-space: nowrap; cursor: default; letter-spacing: .01em; }
 .tp-task:hover .tp-added { opacity: 1; }
 dialog:has(.dlg.settings) { width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
 .dlg.settings { max-height: calc(100vh - 48px); overflow-y: auto; }
@@ -1012,3 +1011,102 @@ dialog:has(.dlg.settings) { width: min(600px, calc(100vw - 32px)); max-height: c
 .pw-buttons { display: flex; gap: 8px; }
 .btn-red-outline { color: var(--red); border-color: var(--border-strong); }
 .btn-red-outline:hover { background: var(--red-soft); border-color: var(--red); }
+
+/* ------------------------------------------------------------ resizable side panels */
+@media (min-width: 761px) { #sidebar, #taskpanel { position: relative; } } /* (phones: they stay fixed overlays) */
+.resizer { position: absolute; top: 0; bottom: 0; width: 9px; z-index: 6; cursor: col-resize; touch-action: none; outline: none; }
+#sb-resizer { right: -5px; }
+#tp-resizer { left: -5px; }
+.resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; transition: background .12s; }
+.resizer:hover::after, .resizer:focus-visible::after, body.resizing .resizer.active::after { background: var(--blue); }
+body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+body.resizing #sidebar, body.resizing #taskpanel { transition: none !important; }
+@media (max-width: 760px) { .resizer { display: none; } }
+
+/* ------------------------------------------------------------ Scratchpad: pinned first row of Notes */
+.tree-row.scratch-row {
+  margin: 2px 0 8px; padding: 0 8px 0 10px; height: 38px; border-radius: 9px; gap: 9px;
+  background: var(--green-soft); color: var(--green-600); font-weight: 650; font-size: 14.5px; cursor: pointer;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 22%, transparent);
+}
+.tree-row.scratch-row .row-icon { color: var(--green); }
+.tree-row.scratch-row .row-icon svg.i { width: 17px; height: 17px; }
+.tree-row.scratch-row:hover { background: color-mix(in srgb, var(--green-soft) 70%, var(--green) 12%); }
+.tree-row.scratch-row.active { background: var(--green); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--green) 35%, transparent); }
+.tree-row.scratch-row.active .row-icon, .tree-row.scratch-row.active .scratch-pin { color: #fff; }
+.tree-row.scratch-row .row-badge { background: var(--green); color: #fff; }
+.tree-row.scratch-row.active .row-badge { background: #fff; color: var(--green-600); }
+.scratch-pin { display: flex; color: var(--green); opacity: .7; margin-left: auto; }
+.tree-row.scratch-row .row-badge + .scratch-pin { margin-left: 0; }
+.scratch-pin svg.i { width: 15px; height: 15px; transform: rotate(35deg); }
+
+/* ------------------------------------------------------------ task column chip */
+.tp-stage {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 650;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted);
+}
+.tp-stage:hover { border-color: var(--blue); color: var(--blue-600); }
+.tp-stage.doing { background: #fff4dc; border-color: transparent; color: #8a5a00; }
+:root[data-theme="dark"] .tp-stage.doing { background: rgba(226, 166, 69, .18); color: #f0c477; }
+.tp-meta { row-gap: 4px; }
+/* "Doing" badge on a to-do inside a note */
+.rich .task-stage {
+  display: inline-flex; align-items: center; margin-left: 8px; padding: 0 8px; height: 20px; border-radius: 10px; vertical-align: 1px;
+  font-size: 11.5px; font-weight: 650; background: #fff4dc; color: #8a5a00; cursor: pointer; user-select: none; border: 0;
+}
+:root[data-theme="dark"] .rich .task-stage { background: rgba(226, 166, 69, .18); color: #f0c477; }
+.rich .task-stage:hover { box-shadow: 0 0 0 1.5px var(--amber); }
+
+/* "View as board" in the Tasks panel header */
+.tp-board-btn {
+  display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 8px; margin-left: auto;
+  font-size: 12px; font-weight: 600; color: var(--purple-600); background: var(--purple-soft);
+}
+.tp-board-btn svg.i { width: 14px; height: 14px; }
+.tp-board-btn:hover { box-shadow: inset 0 0 0 1px var(--purple); }
+.tp-board-btn.on { background: var(--purple); color: #fff; }
+.tp-board-btn + #tp-pin { margin-left: 2px; }
+
+/* ------------------------------------------------------------ board view */
+.board-view { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 22px 24px 0; }
+.board-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+.board-titles h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.board-titles { flex: 1; min-width: 160px; }
+.board-filter-wrap { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+#board-filter { height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 0 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; max-width: 240px; }
+.board-head .btn svg.i { width: 15px; height: 15px; }
+.board-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(170px, 1fr)); gap: 12px; padding-bottom: 18px; overflow-x: auto; }
+.board-col { display: flex; flex-direction: column; min-height: 0; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); transition: box-shadow .12s, background .12s; }
+.board-col.drop { box-shadow: 0 0 0 2px var(--blue); background: var(--blue-softer); }
+.bcol-head { display: flex; align-items: center; gap: 8px; margin: 0; padding: 11px 14px 9px; font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+.bcol-head .dot { width: 9px; height: 9px; border-radius: 50%; }
+.board-col.todo .dot { background: var(--blue); }
+.board-col.doing .dot { background: var(--amber); }
+.board-col.done .dot { background: var(--green); }
+.bcol-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--faint); }
+.board-list { list-style: none; margin: 0; padding: 2px 10px 14px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; min-height: 60px; }
+.board-card {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 9px; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--border); box-shadow: var(--shadow-sm); cursor: grab;
+}
+.board-card + .board-card { border-top: 1px solid var(--border); }
+.board-card:hover { border-color: var(--border-strong); }
+.board-card.dragging { opacity: .4; }
+.board-card .bc-top { display: flex; align-items: flex-start; gap: 8px; }
+.board-card .bc-top .tp-title { flex: 1; min-width: 0; cursor: text; }
+.board-card .check { margin-top: 2px; }
+.bc-more { opacity: 0; margin: -3px -4px 0 0; }
+.board-card:hover .bc-more, .board-card:focus-within .bc-more { opacity: 1; }
+.bc-details { font-size: 12px; color: var(--text-2); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; padding-left: 27px; }
+.board-card .tp-meta { padding-left: 27px; }
+.bc-from { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; font-size: 11.5px; color: var(--muted); }
+.bc-from svg.i { width: 12px; height: 12px; flex: none; }
+.bc-from span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button.bc-from:hover { color: var(--blue); }
+.board-card.done .tp-title { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--check-border); }
+.board-empty { padding: 14px 6px; text-align: center; font-size: 12.5px; color: var(--faint); border: 1.5px dashed var(--border-strong); border-radius: 10px; }
+.board-more { padding: 6px; text-align: center; font-size: 12px; color: var(--faint); }
+@media (max-width: 760px) {
+  .board-view { padding: 14px 12px 0; }
+  .board-cols { grid-template-columns: repeat(3, minmax(240px, 82vw)); }
+}

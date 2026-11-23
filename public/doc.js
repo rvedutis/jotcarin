@@ -101,6 +101,7 @@ export function docTasks(doc) {
         due: /^\d{4}-\d{2}-\d{2}$/.test(n.attrs?.due || '') ? n.attrs.due : null,
         created: n.attrs?.created > 0 ? n.attrs.created : null, // null = unknown (added before dates were recorded)
         edited: n.attrs?.edited > 0 ? n.attrs.edited : null,
+        stage: n.attrs?.stage === 'doing' ? 'doing' : 'todo', // board column while not done
       });
     }
     n.content?.forEach(walk);
@@ -126,10 +127,10 @@ export function textToInline(text) {
 
 /**
  * Copy of the doc with to-do #index changed: `title` (plain text; date labels become tags),
- * `body` (plain text, one paragraph per line), `due` (YYYY-MM-DD or null). Returns null if
+ * `body` (plain text, one paragraph per line), `due` (YYYY-MM-DD or null), `stage` ('todo' | 'doing' | 'done'). Returns null if
  * the to-do isn't there, or its details hold rich content (edit those in the note).
  */
-export function updateTask(doc, index, { title, body, due } = {}) {
+export function updateTask(doc, index, { title, body, due, stage } = {}) {
   const copy = structuredClone(doc);
   const path = findTaskPath(copy, index);
   if (!path) return null;
@@ -138,6 +139,9 @@ export function updateTask(doc, index, { title, body, due } = {}) {
   if (item.content[0].type !== 'paragraph') item.content.unshift({ type: 'paragraph' });
   item.attrs = { ...(item.attrs || {}), edited: Date.now() }; // changed from the Tasks panel
   if (due !== undefined) item.attrs = { ...item.attrs, due: due || null };
+  // Board column: Done = checked; To do / Doing = unchecked, with the column kept for later.
+  if (stage === 'done') item.attrs = { ...item.attrs, checked: true };
+  else if (stage === 'doing' || stage === 'todo') item.attrs = { ...item.attrs, checked: false, stage: stage === 'doing' ? 'doing' : null };
   if (title !== undefined) {
     const inline = textToInline(String(title).replace(/\s+/g, ' ').trim());
     item.content[0] = inline.length ? { ...item.content[0], content: inline } : { type: 'paragraph', ...(item.content[0].attrs ? { attrs: item.content[0].attrs } : {}) };

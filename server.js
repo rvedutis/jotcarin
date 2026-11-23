@@ -192,7 +192,8 @@ function addColumn(table, col, def) {
 addColumn('tasks', 'body', "TEXT NOT NULL DEFAULT ''"); // standalone task details
 addColumn('tasks', 'due', 'TEXT');                       // standalone task due date (YYYY-MM-DD)
 addColumn('notes', 'version', 'INTEGER NOT NULL DEFAULT 0'); // bumped on every text change, so a stale window can't overwrite newer text
-addColumn('folders', 'position', 'REAL'); // your own order in the sidebar (null = after ordered ones, by name)
+addColumn('folders', 'position', 'REAL');
+addColumn('tasks', 'stage', 'TEXT'); // board column while not done: 'doing', or null = To do (done tasks are in Done) // your own order in the sidebar (null = after ordered ones, by name)
 addColumn('notes', 'position', 'REAL');
 
 // ---------------------------------------------------------------- database health
@@ -306,7 +307,7 @@ const q = {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`),
   updFolder: db.prepare('UPDATE folders SET parent_id = ?, name = ?, updated_at = ? WHERE id = ?'),
   updNote: db.prepare('UPDATE notes SET folder_id = ?, title = ?, content = ?, updated_at = ?, version = ? WHERE id = ?'),
-  updTask: db.prepare('UPDATE tasks SET text = ?, done = ?, completed_at = ?, updated_at = ?, body = ?, due = ? WHERE id = ?'),
+  updTask: db.prepare('UPDATE tasks SET text = ?, done = ?, completed_at = ?, updated_at = ?, body = ?, due = ?, stage = ? WHERE id = ?'),
   delFolder: db.prepare('DELETE FROM folders WHERE id = ?'),
   delNote: db.prepare('DELETE FROM notes WHERE id = ?'),
   delTask: db.prepare('DELETE FROM tasks WHERE id = ?'),
@@ -334,7 +335,7 @@ setInterval(() => backupIfDue(24 * 3600 * 1000), 3600 * 1000).unref();
 
 const toFolder = (r) => r && ({ id: r.id, parentId: r.parent_id, name: r.name, position: r.position ?? null, createdAt: r.created_at, updatedAt: r.updated_at });
 const toNote = (r) => r && ({ id: r.id, folderId: r.folder_id, title: r.title, content: r.content, position: r.position ?? null, createdAt: r.created_at, updatedAt: r.updated_at, version: r.version || 0 });
-const toTask = (r) => r && ({ id: r.id, text: r.text, body: r.body || '', due: r.due || null, done: !!r.done, createdAt: r.created_at, completedAt: r.completed_at, updatedAt: r.updated_at });
+const toTask = (r) => r && ({ id: r.id, text: r.text, body: r.body || '', due: r.due || null, stage: r.stage === 'doing' ? 'doing' : 'todo', done: !!r.done, createdAt: r.created_at, completedAt: r.completed_at, updatedAt: r.updated_at });
 
 // ---------------------------------------------------------------- validation
 class HttpError extends Error {
@@ -377,6 +378,12 @@ function position(v) {
   if (v === null) return null;
   if (typeof v !== 'number' || !Number.isFinite(v)) throw new HttpError(400, 'position must be a number or null');
   return v;
+}
+/** Board column of an open task: 'todo' or 'doing' (Done is the task's done flag). */
+function stage(v) {
+  if (v === null || v === 'todo') return null;
+  if (v === 'doing') return 'doing';
+  throw new HttpError(400, 'stage must be "todo" or "doing"');
 }
 function ts(v, fallback) { return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback; }
 function requireFolder(fid) {
@@ -484,6 +491,7 @@ route('POST', /^\/api\/tasks$/, (_, b) => tx(() => {
   const done = !!b.done;
   const now = Date.now();
   q.insTask.run(tid, text, done ? 1 : 0, ts(b.createdAt, now), done ? ts(b.completedAt, now) : null, now, body, due);
+  if (b.stage !== undefined) q.updTask.run(text, done ? 1 : 0, done ? ts(b.completedAt, now) : null, now, body, due, stage(b.stage), tid);
   return toTask(q.getTask.get(tid));
 }));
 
@@ -494,6 +502,7 @@ route('PATCH', /^\/api\/tasks\/([^/]+)$/, ([tid], b) => tx(() => {
   const text = b.text !== undefined ? str(b.text, 'text', 2000, { allowEmpty: false }).trim() : cur.text;
   const body = b.body !== undefined ? str(b.body, 'body', 100_000) : cur.body || '';
   const due = b.due !== undefined ? dueDate(b.due) : cur.due || null;
+  const stg = b.stage !== undefined ? stage(b.stage) : cur.stage || null;
   let done = !!cur.done;
   let completedAt = cur.completed_at;
   if (b.done !== undefined) {
@@ -501,7 +510,7 @@ route('PATCH', /^\/api\/tasks\/([^/]+)$/, ([tid], b) => tx(() => {
     if (next !== done) completedAt = next ? Date.now() : null;
     done = next;
   }
-  q.updTask.run(text, done ? 1 : 0, completedAt, Date.now(), body, due, tid);
+  q.updTask.run(text, done ? 1 : 0, completedAt, Date.now(), body, due, stg, tid);
   return toTask(q.getTask.get(tid));
 }));
 
