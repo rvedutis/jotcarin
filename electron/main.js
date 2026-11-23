@@ -7,7 +7,7 @@
  * it; otherwise the app starts its own server and stops it again when you quit.
  * The password lock lives in the server, so it applies here and in a browser alike.
  */
-const { app, BrowserWindow, Menu, Tray, dialog, shell, session, utilityProcess, screen, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, shell, session, utilityProcess, screen, nativeTheme, globalShortcut } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -198,7 +198,10 @@ function createWindow() {
     },
   });
   if (bounds.maximized) win.maximize();
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (startHidden) { startHidden = false; return; } // started with Windows: wait in the tray
+    win.show();
+  });
 
   const wc = win.webContents;
 
@@ -268,6 +271,45 @@ function createWindow() {
   win.loadURL(`${ORIGIN}/`);
 }
 
+// ---------------------------------------------------------------- quick capture + start with Windows
+/**
+ * Alt+Win+Space anywhere in Windows brings Taskule forward with the cursor on a fresh line in
+ * the Scratchpad. It works whenever Taskule is running (also hidden in the tray), so by default
+ * Taskule starts with Windows, quietly in the tray (tray menu → "Start with Windows" to turn off).
+ */
+const HOTKEY = 'Alt+Super+Space';
+const HOTKEY_LABEL = 'Alt+Win+Space';
+let startHidden = process.argv.includes('--hidden');
+let hotkeyOk = false;
+// Only the installed app manages the Windows startup entry (not dev runs or test copies).
+const MANAGES_LOGIN = app.isPackaged && !process.env.DATA_DIR && !process.env.TASKULE_NO_LOGIN_ITEM;
+
+function quickCapture() {
+  showWindow();
+  if (!win) return;
+  win.webContents.focus();
+  win.webContents.executeJavaScript('window.__taskuleQuickCapture && window.__taskuleQuickCapture()').catch(() => {});
+}
+function registerHotkey() {
+  try { hotkeyOk = globalShortcut.register(HOTKEY, quickCapture); } catch { hotkeyOk = false; }
+  if (!hotkeyOk) console.error(`Taskule: ${HOTKEY_LABEL} is already taken by Windows or another app, so quick capture is off.`);
+}
+const loginArgs = ['--hidden'];
+function startsWithWindows() { return MANAGES_LOGIN && app.getLoginItemSettings({ args: loginArgs }).openAtLogin; }
+function setStartWithWindows(on) {
+  if (!MANAGES_LOGIN) return;
+  app.setLoginItemSettings({ openAtLogin: on, args: loginArgs });
+  refreshTrayMenu();
+}
+/** First run of a version with quick capture: start with Windows, so the hotkey is always there. */
+function defaultStartWithWindows() {
+  if (!MANAGES_LOGIN) return;
+  const flag = path.join(app.getPath('userData'), 'start-with-windows-set');
+  if (fs.existsSync(flag)) return;
+  setStartWithWindows(true);
+  try { fs.writeFileSync(flag, new Date().toISOString()); } catch { /* asked again next time; harmless */ }
+}
+
 // ---------------------------------------------------------------- tray
 let tray = null;
 
@@ -315,15 +357,21 @@ async function quitApp() {
   app.quit();
 }
 
-function createTray() {
-  tray = new Tray(TRAY_ICON);
-  tray.setToolTip('Taskule');
+function refreshTrayMenu() {
+  if (!tray) return;
+  tray.setToolTip(hotkeyOk ? `Taskule — ${HOTKEY_LABEL} for the Scratchpad` : 'Taskule');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open Taskule', click: showWindow },
+    { label: `Quick capture to Scratchpad${hotkeyOk ? `  (${HOTKEY_LABEL})` : ''}`, click: quickCapture },
     { label: 'Lock', click: lockApp },
     { type: 'separator' },
+    ...(MANAGES_LOGIN ? [{ label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), click: (mi) => setStartWithWindows(mi.checked) }, { type: 'separator' }] : []),
     { label: 'Quit Taskule', click: () => { quitApp(); } },
   ]));
+}
+function createTray() {
+  tray = new Tray(TRAY_ICON);
+  refreshTrayMenu();
   tray.on('click', showWindow);
 }
 
@@ -341,7 +389,7 @@ function trayHint() {
 }
 
 // For automated tests over --inspect (main process only; web pages can't reach this).
-global.__taskule = { showWindow, lockApp, quitApp, get tray() { return tray; }, get win() { return win; } };
+global.__taskule = { showWindow, lockApp, quitApp, quickCapture, get hotkeyOk() { return hotkeyOk; }, get tray() { return tray; }, get win() { return win; } };
 
 // ---------------------------------------------------------------- app lifecycle
 if (!app.requestSingleInstanceLock()) {
@@ -354,7 +402,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
 
     const ses = session.defaultSession;
-    // Every time the app opens, it starts locked.
+    // Every time the app opens, it asks for the password again (if one is set).
     await ses.cookies.remove(ORIGIN, 'tk_session').catch(() => {});
     // The app needs no camera, microphone, location, notifications, etc.
     ses.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'clipboard-sanitized-write'));
@@ -371,12 +419,15 @@ if (!app.requestSingleInstanceLock()) {
       app.quit();
       return;
     }
+    registerHotkey();
+    defaultStartWithWindows();
     createTray();
     createWindow();
     watchServer();
+    if (!hotkeyOk && !startHidden) tray?.displayBalloon({ iconType: 'warning', title: 'Quick capture is off', content: `${HOTKEY_LABEL} is already used by Windows or another app.` });
   });
 
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', () => { quitting = true; });
-  app.on('will-quit', () => { if (server) server.kill(); });
+  app.on('will-quit', () => { globalShortcut.unregisterAll(); if (server) server.kill(); });
 }

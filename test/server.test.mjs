@@ -66,26 +66,44 @@ try {
   let r = await c.call('GET', '/api/health');
   check('health ok on a fresh database', r.status === 200 && r.json.ok === true, r.json);
   check('a backup is taken at startup', fs.readdirSync(path.join(tmp, 'backups')).some((f) => f.endsWith('-auto.db')));
-  r = await c.call('GET', '/api/session');
-  check('first run asks to create a password', r.json.setup === true && r.json.unlocked === false, r.json);
-  r = await c.call('GET', '/api/state');
-  check('notes are locked before a password exists', r.status === 401);
-  r = await c.call('POST', '/api/login', { password: 'anything' });
-  check('login is refused before setup', r.status === 409);
-  r = await c.call('POST', '/api/setup', { password: 'ab' });
+  // ---------------------------------------------------------------- password: open by default, set in Settings
+  const anon0 = client(port);
+  r = await anon0.call('GET', '/api/session');
+  check('no password by default: open', r.json.open === true && r.json.unlocked === true, r.json);
+  r = await anon0.call('GET', '/api/state');
+  check('notes readable with no password set', r.status === 200);
+  r = await anon0.call('POST', '/api/setup', { password: 'x123' });
+  check('no first-run setup route any more', r.status === 404);
+  r = await c.call('POST', '/api/password', { password: 'ab' });
   check('too-short password refused', r.status === 400);
-  r = await c.call('POST', '/api/setup', { password: 'correct horse' });
-  check('setup creates the password and unlocks', r.status === 200);
+  r = await c.call('POST', '/api/password', { password: 'correct horse' });
+  check('setting a password from open works', r.status === 200 && r.json.open === false, r.json);
   check('no password stored in plain text', !fs.readFileSync(path.join(tmp, 'password.json'), 'utf8').includes('correct horse'));
-  r = await c.call('POST', '/api/setup', { password: 'takeover' });
-  check('setup can’t be repeated once a password exists', r.status === 409);
   r = await c.call('GET', '/api/state');
-  check('unlocked after setup', r.status === 200);
+  check('the window that set it stays unlocked', r.status === 200);
+  r = await anon0.call('GET', '/api/state');
+  check('everyone else is now locked out', r.status === 401);
+  r = await anon0.call('POST', '/api/password', { password: null });
+  check('a locked window can’t remove the password', r.status === 401);
   const other = client(port);
   r = await other.call('POST', '/api/login', { password: 'wrong' });
   check('wrong password refused', r.status === 401);
   r = await other.call('POST', '/api/login', { password: 'correct horse' });
   check('right password accepted', r.status === 200);
+  r = await other.call('POST', '/api/password', { current: 'nope', password: 'new one' });
+  check('changing needs the current password', r.status === 403);
+  r = await other.call('POST', '/api/password', { current: 'correct horse', password: 'second pass' });
+  check('changing with the current password works', r.status === 200);
+  r = await c.call('GET', '/api/state');
+  check('changing locks other windows', r.status === 401);
+  r = await other.call('POST', '/api/password', { current: 'wrong', password: null });
+  check('removing needs the current password', r.status === 403);
+  r = await other.call('POST', '/api/password', { current: 'second pass', password: null });
+  check('removing it opens Taskule again', r.status === 200 && r.json.open === true && !fs.existsSync(path.join(tmp, 'password.json')), r.json);
+  r = await anon0.call('GET', '/api/state');
+  check('open again for everyone', r.status === 200);
+  // keep a password for the rest of the tests
+  await c.call('POST', '/api/password', { password: 'correct horse' });
 
   // ---------------------------------------------------------------- Scratchpad
   r = await c.call('GET', '/api/state');
@@ -172,32 +190,6 @@ try {
   r = await c.call('PATCH', '/api/notes/p1', { position: 'first' });
   check('bad position refused', r.status === 400);
 
-  // ---------------------------------------------------------------- date password (mmddyyyy, US Eastern)
-  {
-    const pwFile = path.join(tmp, 'password.json');
-    const saved = fs.readFileSync(pwFile);
-    fs.writeFileSync(pwFile, JSON.stringify({ mode: 'date' }));
-    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((x) => [x.type, x.value]));
-    const today = `${p.month}${p.day}${p.year}`;
-    const dm = client(port);
-    r = await dm.call('GET', '/api/session');
-    check('date mode is a set password (no setup screen)', r.json.setup === false && !r.json.error, r.json);
-    r = await dm.call('POST', '/api/login', { password: 'correct horse' });
-    check('old fixed password no longer works in date mode', r.status === 401);
-    r = await dm.call('POST', '/api/login', { password: '01012000' });
-    check('another date is refused', r.status === 401);
-    r = await dm.call('POST', '/api/login', { password: `${p.month}/${p.day}/${p.year}` });
-    check('separators are refused (mmddyyyy only)', r.status === 401);
-    r = await dm.call('POST', '/api/login', { password: today });
-    check(`today's date (${today}) unlocks`, r.status === 200);
-    r = await dm.call('GET', '/api/state');
-    check('unlocked in date mode', r.status === 200);
-    r = await c.call('GET', '/api/state');
-    check('switching to date mode locks existing sessions', r.status === 401);
-    fs.writeFileSync(pwFile, saved);
-    await c.call('POST', '/api/login', { password: 'correct horse' });
-  }
-
   // ---------------------------------------------------------------- damaged password file
   await c.call('POST', '/api/notes', { id: 'keep', title: 'Keep me', content: doc('important') });
   const pwFile = path.join(tmp, 'password.json');
@@ -205,9 +197,13 @@ try {
   fs.writeFileSync(pwFile, '{ broken');
   const anon = client(port);
   r = await anon.call('GET', '/api/session');
-  check('damaged password file is reported, not treated as "no password"', r.json.setup === false && !!r.json.error, r.json);
-  r = await anon.call('POST', '/api/setup', { password: 'takeover' });
-  check('damaged password file can’t be replaced through the app', r.status !== 200);
+  check('damaged password file is reported, not treated as open', r.json.open === false && r.json.unlocked === false && !!r.json.error, r.json);
+  r = await anon.call('GET', '/api/state');
+  check('damaged password file keeps notes locked', r.status !== 200);
+  r = await anon.call('POST', '/api/password', { password: null });
+  check('damaged password file can’t be removed through the app', r.status !== 200);
+  r = await anon.call('GET', '/images/11111111-2222-3333-4444-555555555555.png');
+  check('damaged password file keeps images locked', r.status === 401);
   fs.writeFileSync(pwFile, pwGood);
 
   // ---------------------------------------------------------------- damaged database
@@ -253,7 +249,7 @@ for (const [oldName, offset] of [['jotcairn.db', 1], ['actionbase.db', 2]]) {
     old.prepare('INSERT INTO tasks VALUES (?, ?, 0, 1, NULL, 1)').run('ot1', 'Old task');
     check('old database has unflushed writes in its WAL', fs.existsSync(path.join(dir, oldName + '-wal')) && fs.statSync(path.join(dir, oldName + '-wal')).size > 0);
     // leave it open-and-abandoned like a crashed process would (closing would checkpoint)
-    fs.writeFileSync(path.join(dir, 'password.json'), JSON.stringify({ salt: 'x', hash: '0'.repeat(64) }));
+    fs.writeFileSync(path.join(dir, 'password.json'), oldName === 'jotcairn.db' ? JSON.stringify({ mode: 'date' }) : JSON.stringify({ salt: 'x', hash: '0'.repeat(64) }));
     old.close();
     m = await startServer(dir, port + offset);
     check(`${oldName} renamed to taskule.db`, fs.existsSync(path.join(dir, 'taskule.db')) && !fs.existsSync(path.join(dir, oldName)), fs.readdirSync(dir));
@@ -263,6 +259,10 @@ for (const [oldName, offset] of [['jotcairn.db', 1], ['actionbase.db', 2]]) {
     now.close();
     const h = await (await fetch(`http://localhost:${port + offset}/api/health`)).json();
     check('healthy after the rename', h.ok === true, h);
+    if (oldName === 'jotcairn.db') {
+      const sess = await (await fetch(`http://localhost:${port + offset}/api/session`)).json();
+      check('old date-based password retired: open until one is set', sess.open === true && !fs.existsSync(path.join(dir, 'password.json')), sess);
+    }
   } finally {
     try { await m?.stop(); } catch { /* stopped */ }
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* temp */ }

@@ -60,54 +60,38 @@ function timeAgo(ts) {
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 /* =====================================================================
-   Password lock. The server refuses every API call (401) until you
-   unlock; any request that hits a 401 waits for the lock screen and is
-   then retried, so nothing you typed is lost if the lock appears mid-edit.
+   Password lock. With no password set, Taskule is simply open. With one
+   (Settings → Password), the server refuses every API call (401) until
+   you unlock; any request that hits a 401 waits for the lock screen and
+   is then retried, so nothing you typed is lost if the lock appears mid-edit.
    ===================================================================== */
 const nativeFetch = window.fetch.bind(window);
+/** Whether a password is set (known from the server; updated by Settings). */
+const security = { hasPassword: false };
 const lock = {
   waiting: null,
-  /**
-   * Show the lock screen; resolves once the right password is entered.
-   * On first run (no password set yet) it asks you to create one instead.
-   */
+  /** Show the lock screen; resolves once the right password is entered. */
   require() {
     if (this.waiting) return this.waiting;
     this.waiting = new Promise((resolve) => {
       const screen = $('#lock');
       const form = $('#lock-form');
       const input = $('#lock-password');
-      const confirm = $('#lock-confirm');
       const err = $('#lock-error');
       const btn = $('#lock-submit');
-      let setup = false;
-      const setMode = (isSetup, problem) => {
-        setup = isSetup;
-        $('.lock-title', form).textContent = setup ? 'Create a password' : 'Taskule is locked';
-        $('.lock-sub', form).textContent = setup
-          ? 'Choose a password for Taskule. You’ll enter it each time you open it.'
-          : 'Enter your password to open your notes.';
-        confirm.hidden = !setup;
-        confirm.required = setup;
-        input.autocomplete = setup ? 'new-password' : 'current-password';
-        btn.textContent = setup ? 'Set password' : 'Unlock';
-        err.textContent = problem || '';
-      };
       $('#app').inert = true;
       document.querySelectorAll('dialog[open]').forEach((d) => d.close());
       screen.hidden = false;
       input.value = '';
-      confirm.value = '';
       input.classList.remove('bad');
-      confirm.classList.remove('bad');
-      setMode(false);
-      nativeFetch('/api/session', { cache: 'no-store' }).then((r) => r.json()).then((s) => setMode(!!s.setup, s.error)).catch(() => {});
+      err.textContent = '';
+      nativeFetch('/api/session', { cache: 'no-store' }).then((r) => r.json()).then((st) => { if (st.error) err.textContent = st.error; }).catch(() => {});
       setTimeout(() => input.focus());
-      input.oninput = confirm.oninput = () => { input.classList.remove('bad'); confirm.classList.remove('bad'); err.textContent = ''; };
-      const fail = (msg, field = input) => {
+      input.oninput = () => { input.classList.remove('bad'); err.textContent = ''; };
+      const fail = (msg) => {
         err.textContent = msg;
-        field.classList.add('bad');
-        field.select();
+        input.classList.add('bad');
+        input.select();
         form.classList.remove('shake');
         void form.offsetWidth; // restart the animation
         form.classList.add('shake');
@@ -115,15 +99,10 @@ const lock = {
       form.onsubmit = async (e) => {
         e.preventDefault();
         if (btn.disabled) return;
-        if (setup) {
-          if (input.value.length < 3) { fail('Use at least 3 characters.'); return; }
-          if (confirm.value !== input.value) { fail('The two passwords don’t match.', confirm); return; }
-        }
         btn.disabled = true;
-        const label = btn.textContent;
-        btn.textContent = setup ? 'Saving…' : 'Unlocking…';
+        btn.textContent = 'Unlocking…';
         try {
-          const res = await nativeFetch(setup ? '/api/setup' : '/api/login', {
+          const res = await nativeFetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password: input.value }),
@@ -134,16 +113,16 @@ const lock = {
             form.onsubmit = null;
             this.waiting = null;
             resolve();
+            if (booted && pendingQuickCapture) { pendingQuickCapture = false; setTimeout(() => openScratchpad({ newLine: true })); }
             return;
           }
           const msg = (await res.json().catch(() => null))?.error;
-          if (res.status === 409) { setMode(!setup); fail(msg || 'Please try again.'); return; } // mode changed underneath us
           fail(res.status === 401 ? 'That password isn’t right. Try again.' : msg || `Couldn’t unlock (error ${res.status}).`);
         } catch {
           err.textContent = 'Can’t reach the Taskule server. Is it running?';
         } finally {
           btn.disabled = false;
-          if (btn.textContent.endsWith('…')) btn.textContent = label;
+          btn.textContent = 'Unlock';
         }
       };
     });
@@ -151,6 +130,10 @@ const lock = {
   },
   /** Lock now: save anything pending, end the session, and reload into the lock screen. */
   async now() {
+    if (!security.hasPassword) {
+      toast('Taskule has no password, so there’s nothing to lock. Set one in Settings → Password.', { action: 'Settings', onAction: () => settingsDialog() });
+      return;
+    }
     flushNotes();
     await Promise.race([sync.idle(), sleep(5000)]);
     try { await nativeFetch('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch { /* reload locks anyway if the cookie is gone */ }
@@ -838,13 +821,23 @@ async function deleteNote(id) {
 /** If this note is open, make the editor show its current content (without echoing an update). */
 /* ------------------------------------------------------------- Scratchpad */
 /** Open the Scratchpad, ready to type. `newLine`: start a fresh line at the end (Alt+S). */
+/** Quick capture: a fresh empty line at the very top of the Scratchpad, with the cursor on it. */
+function newLineAtTop(ed) {
+  const first = ed.state.doc.firstChild;
+  const empty = first && first.type.name === 'paragraph' && first.content.size === 0;
+  if (!empty) ed.chain().insertContentAt(0, { type: 'paragraph' }).run();
+  ed.commands.setTextSelection(1);
+  ed.view.focus();
+  const sc = $('#editor-scroll');
+  if (sc) sc.scrollTop = 0;
+}
+
 function openScratchpad({ newLine = false } = {}) {
   if (!S.notes.has(SCRATCH)) { resync(true).then(() => { if (S.notes.has(SCRATCH)) openScratchpad({ newLine }); }); return; }
   if (S.view.type === 'note' && isScratch(S.view.id) && editor) {
     closeSidebar();
+    if (newLine) { newLineAtTop(editor); return; }
     editor.commands.focus('end');
-    const last = editor.state.doc.lastChild;
-    if (newLine && last && last.textContent.trim()) editor.commands.splitBlock();
     editor.view.focus();
     return;
   }
@@ -2479,12 +2472,13 @@ function openNote(id, opts = {}) {
 
   // ---- initial focus
   if (scratch && opts.find == null && opts.task == null) {
-    // Ready to type: cursor at the end (on a fresh line if the last one has text).
-    editor.commands.focus('end');
-    const last = editor.state.doc.lastChild;
-    if (opts.newLine && last && last.textContent.trim()) editor.commands.splitBlock();
-    editor.view.focus();
-    $('#editor-scroll').scrollTop = $('#editor-scroll').scrollHeight;
+    if (opts.newLine) {
+      newLineAtTop(editor); // quick capture: new line at the top, ready to type
+    } else {
+      editor.commands.focus('end');
+      editor.view.focus();
+      $('#editor-scroll').scrollTop = $('#editor-scroll').scrollHeight;
+    }
   } else if (opts.focusTitle && title) {
     title.focus();
     title.select();
@@ -2807,7 +2801,7 @@ const theme = {
 /** App shortcuts you can change in Settings. Editor formatting keys (Ctrl+B …) stay fixed. */
 const SHORTCUTS = [
   { id: 'newNote', label: 'New note', def: 'Alt+N' },
-  { id: 'scratch', label: 'Open the Scratchpad', hint: 'cursor on a new line, ready to type', def: 'Alt+S' },
+  { id: 'scratch', label: 'Open the Scratchpad', hint: 'new line at the top, ready to type', def: 'Alt+S' },
   { id: 'tasks', label: 'Add a task', hint: 'opens the Tasks panel', def: 'Alt+T' },
   { id: 'toggleTasks', label: 'Show / hide the Tasks panel', def: 'Ctrl+]' },
   { id: 'sidebar', label: 'Show / hide the sidebar', def: 'Ctrl+\\' },
@@ -2899,6 +2893,75 @@ function refreshShortcutHints() {
   if (S.notes) renderTree();
 }
 
+/** Settings → Password: set one (Taskule then asks for it when it opens), change it, or remove it. */
+function passwordSettings(d) {
+  let mode = null; // 'set' | 'change' | 'remove'
+  const el = (id) => $(`#${id}`, d);
+  const msg = (text, ok = true) => { el('pw-msg').textContent = text; el('pw-msg').classList.toggle('ok', ok); };
+  const draw = () => {
+    el('pw-state').textContent = security.hasPassword
+      ? 'Taskule asks for a password when it opens.'
+      : 'No password: Taskule opens without asking for one.';
+    el('pw-actions').innerHTML = mode ? '' : security.hasPassword
+      ? '<button type="button" class="btn" data-pw="change">Change password…</button><button type="button" class="btn btn-red-outline" data-pw="remove">Remove password…</button>'
+      : '<button type="button" class="btn btn-blue" data-pw="set">Set a password…</button>';
+    el('pw-form').hidden = !mode;
+    el('pw-current').hidden = !(mode === 'change' || mode === 'remove');
+    el('pw-new').hidden = el('pw-confirm').hidden = mode === 'remove';
+    el('pw-save').textContent = mode === 'remove' ? 'Remove password' : 'Save password';
+    el('pw-save').classList.toggle('btn-red', mode === 'remove');
+    el('pw-save').classList.toggle('btn-blue', mode !== 'remove');
+  };
+  const start = (m) => {
+    mode = m;
+    for (const id of ['pw-current', 'pw-new', 'pw-confirm']) el(id).value = '';
+    msg(m === 'remove' ? 'Enter your current password to remove it.' : '');
+    draw();
+    (m === 'set' ? el('pw-new') : el('pw-current')).focus();
+  };
+  const save = async () => {
+    const body = {};
+    if (mode !== 'set') body.current = el('pw-current').value;
+    if (mode === 'remove') body.password = null;
+    else {
+      if (el('pw-new').value.length < 3) { msg('Use at least 3 characters.', false); el('pw-new').focus(); return; }
+      if (el('pw-new').value !== el('pw-confirm').value) { msg('The two new passwords don’t match.', false); el('pw-confirm').focus(); return; }
+      body.password = el('pw-new').value;
+    }
+    el('pw-save').disabled = true;
+    try {
+      const res = await nativeFetch('/api/password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { msg(out.error || `Couldn’t save (error ${res.status}).`, false); el('pw-current').select(); return; }
+      security.hasPassword = out.open === false;
+      const done = mode;
+      mode = null;
+      draw();
+      msg(done === 'remove' ? 'Password removed. Taskule now opens without one.'
+        : done === 'set' ? 'Password set. Taskule will ask for it the next time it opens (this window stays unlocked).'
+          : 'Password changed. Other open windows will ask for the new one.');
+    } catch {
+      msg('Can’t reach the Taskule server.', false);
+    } finally {
+      el('pw-save').disabled = false;
+    }
+  };
+  d.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pw]');
+    if (b) start(b.dataset.pw);
+    else if (e.target.id === 'pw-save') save();
+    else if (e.target.id === 'pw-cancel') { mode = null; msg(''); draw(); }
+  });
+  // Enter saves (instead of closing the dialog)
+  el('pw-form').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+  });
+  draw();
+  nativeFetch('/api/session', { cache: 'no-store' }).then((r) => r.json()).then((st) => {
+    if (typeof st.open === 'boolean' && !mode) { security.hasPassword = !st.open; draw(); }
+  }).catch(() => {});
+}
+
 function settingsDialog() {
   if ($('#dialog').open) return;
   const themes = [['light', 'Light', 'sw-light'], ['dark', 'Dark', 'sw-dark'], ['system', 'Match system', 'sw-system']];
@@ -2919,6 +2982,17 @@ function settingsDialog() {
         <div class="theme-pick">${themes.map(([id, label, sw]) => `<button type="button" class="theme-opt${theme.pref() === id ? ' on' : ''}" data-theme="${id}" aria-pressed="${theme.pref() === id}">
           <span class="theme-swatch ${sw}"><i class="s1"></i><i class="s2"><b></b><b style="width:70%"></b><b style="width:45%"></b></i></span>${label}</button>`).join('')}</div>
       </div>
+      <div class="set-section"><h3>Password</h3>
+        <p class="pw-state" id="pw-state"></p>
+        <div class="pw-actions" id="pw-actions"></div>
+        <div class="pw-form" id="pw-form" hidden>
+          <input type="password" id="pw-current" placeholder="Current password" autocomplete="current-password" aria-label="Current password">
+          <input type="password" id="pw-new" placeholder="New password (at least 3 characters)" autocomplete="new-password" aria-label="New password">
+          <input type="password" id="pw-confirm" placeholder="Type the new password again" autocomplete="new-password" aria-label="Confirm new password">
+          <div class="pw-buttons"><button type="button" class="btn btn-blue" id="pw-save">Save</button><button type="button" class="btn" id="pw-cancel">Cancel</button></div>
+        </div>
+        <p class="key-msg ok" id="pw-msg"></p>
+      </div>
       <div class="set-section"><h3>Keyboard shortcuts</h3>
         <div class="keys" id="keys">${rows()}</div>
         <p class="key-msg ok" id="key-msg">Click a shortcut, then press the new keys. Backspace removes it, Esc cancels.</p>
@@ -2928,6 +3002,7 @@ function settingsDialog() {
     buttons: [{ label: 'Done', value: 'done', cls: 'btn-blue' }],
     onMount: (d) => {
       $('.dlg', d).classList.add('settings');
+      passwordSettings(d);
       const msg = (text, ok = false) => { const m = $('#key-msg', d); m.textContent = text; m.classList.toggle('ok', ok); };
       const redraw = () => { $('#keys', d).innerHTML = rows(); };
       const stop = () => { recording = null; redraw(); };
@@ -3089,7 +3164,7 @@ function setupChrome() {
     showMenu({ x: r.left, y: r.top - 4 }, [
       { label: 'Settings…', icon: I.settings, run: () => settingsDialog() },
       { label: 'Download a copy…', icon: I.download, run: () => downloadDialog() },
-      { label: 'Lock now', icon: I.lock, run: () => lock.now() },
+      ...(security.hasPassword ? [{ label: 'Lock now', icon: I.lock, run: () => lock.now() }] : []),
       'sep',
       { label: 'Wipe database…', icon: I.trash, danger: true, run: () => wipeDialog() },
     ]);
@@ -3141,6 +3216,17 @@ function setupChrome() {
     return !sync.pending;
   };
   window.__taskuleLock = () => lock.now(); // desktop app: tray menu → Lock
+  // Desktop app: Alt+Win+Space from anywhere in Windows. Locked? Unlock first, then it continues.
+  window.__taskuleQuickCapture = () => {
+    if (!$('#lock').hidden || !booted) {
+      pendingQuickCapture = true;
+      setTimeout(() => $('#lock-password')?.focus());
+      return;
+    }
+    $('#dialog').open && $('#dialog').close();
+    closeMenu();
+    openScratchpad({ newLine: true });
+  };
   window.addEventListener('beforeunload', (e) => {
     flushNotes();
     if (sync.pending) { e.preventDefault(); e.returnValue = ''; }
@@ -3194,6 +3280,8 @@ function migrateLegacyNotes() {
   }
 }
 
+let booted = false;
+let pendingQuickCapture = false;
 async function boot() {
   setupChrome();
   setupTree();
@@ -3202,6 +3290,7 @@ async function boot() {
   // Ask for the password up front (rather than after a failed load) when this session isn't unlocked yet.
   try {
     const s = await (await nativeFetch('/api/session', { cache: 'no-store' })).json();
+    security.hasPassword = s?.open === false;
     if (s?.unlocked === false) await lock.require();
   } catch { /* server unreachable: the retry loop below shows that */ }
   main.innerHTML = '<div class="welcome"><p class="page-sub">Loading…</p></div>';
@@ -3225,6 +3314,8 @@ async function boot() {
   renderTodoCount();
   renderTaskPanel();
   route();
+  booted = true;
+  if (pendingQuickCapture) { pendingQuickCapture = false; openScratchpad({ newLine: true }); }
 }
 
 boot();

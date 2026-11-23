@@ -20,15 +20,14 @@ const MAX_IMAGE = 15 * 1024 * 1024;
 const IMAGES_DIR = path.join(DATA_DIR, 'images');
 
 // ---------------------------------------------------------------- password
-// The app is locked until you enter your password. There is no built-in default: on first
-// run the lock screen asks you to create one. It's stored hashed in data/password.json
-// (change it with `npm run set-password`). Unlocking sets a session cookie, so you're
-// asked again each time you reopen the app or browser.
+// Taskule is open (no password) until you set one in Settings. With a password set, it's locked
+// until you enter it; unlocking sets a session cookie, so you're asked again each time you reopen
+// the app or browser. The password is stored hashed (scrypt) in data/password.json.
 const PASSWORD_FILE = path.join(DATA_DIR, 'password.json');
 const SESSION_COOKIE = 'tk_session';
 const SESSION_MAX_AGE = 30 * 24 * 3600 * 1000; // a session is also refused after 30 days
 
-/** The stored password hash; null if none has been set yet. Throws if the file is unreadable. */
+/** The stored password hash; null when no password is set (open). Throws if the file is unreadable. */
 function passwordRecord() {
   let raw;
   try { raw = fs.readFileSync(PASSWORD_FILE, 'utf8'); } catch (err) {
@@ -37,11 +36,9 @@ function passwordRecord() {
   }
   let rec;
   try { rec = JSON.parse(raw); } catch { rec = null; }
-  // Date mode: the password is today's date as mmddyyyy (US Eastern), e.g. 11232026.
-  if (rec && rec.mode === 'date') return { mode: 'date' };
-  // A damaged password file must never fall back to "no password" (that would let anyone set one).
+  // A damaged password file must never fall back to "no password" (that would unlock everything).
   if (!rec || typeof rec.salt !== 'string' || !/^[0-9a-f]{64}$/.test(rec.hash)) {
-    throw new HttpError(500, 'The password file is damaged. Run "npm run set-password" to set a new password.');
+    throw new HttpError(500, 'The password file is damaged. Delete data/password.json to open Taskule, then set a new password in Settings.');
   }
   return rec;
 }
@@ -54,22 +51,21 @@ function writePasswordFile(rec) {
   fs.writeFileSync(tmp, JSON.stringify(rec, null, 2) + '\n', { mode: 0o600 });
   fs.renameSync(tmp, PASSWORD_FILE); // atomic: never a half-written password file
 }
-/** Today's date in US Eastern time as mmddyyyy (the password in date mode). */
-function todayCode(now = new Date()) {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
-    .formatToParts(now).map((p) => [p.type, p.value]));
-  return `${parts.month}${parts.day}${parts.year}`;
-}
 function passwordMatches(pw) {
   if (typeof pw !== 'string' || pw.length > 1000) return false;
   const rec = passwordRecord();
   if (!rec) return false;
-  if (rec.mode === 'date') {
-    const want = Buffer.from(todayCode());
-    const got = Buffer.from(pw.trim());
-    return want.length === got.length && crypto.timingSafeEqual(want, got);
-  }
   return crypto.timingSafeEqual(crypto.scryptSync(pw, rec.salt, 32), Buffer.from(rec.hash, 'hex'));
+}
+/** An earlier version could use a date-based password. That option is gone: it's retired once, which leaves Taskule open until a password is set in Settings. */
+function retireOldPasswordMode() {
+  try {
+    const rec = JSON.parse(fs.readFileSync(PASSWORD_FILE, 'utf8'));
+    if (rec && rec.mode === 'date') {
+      fs.unlinkSync(PASSWORD_FILE);
+      console.log(`[${new Date().toISOString()}] The date-based password option was removed; Taskule is open until a password is set in Settings.`);
+    }
+  } catch { /* no file, or a normal/damaged one: left as is */ }
 }
 
 /** Signing key for session cookies. Kept on disk so a server restart doesn't lock you out mid-edit. */
@@ -90,13 +86,15 @@ function signSession(issued) {
   // Changing the password invalidates every existing session (the hash is part of the signature).
   const rec = passwordRecord();
   if (!rec) return null;
-  return crypto.createHmac('sha256', SESSION_KEY).update(`${issued}.${rec.hash || rec.mode}`).digest('base64url');
+  return crypto.createHmac('sha256', SESSION_KEY).update(`${issued}.${rec.hash}`).digest('base64url');
 }
 function newSessionToken() {
   const issued = Date.now();
   return `${issued}.${signSession(issued)}`;
 }
+/** May this request see your notes? Always, when no password is set; otherwise it needs a valid session cookie. */
 function sessionValid(req) {
+  if (passwordRecord() === null) return true; // open: no password set
   const m = /(?:^|;\s*)tk_session=([^;]+)/.exec(req.headers.cookie || '');
   if (!m) return false;
   const [issuedStr, sig] = m[1].split('.');
@@ -147,6 +145,7 @@ function migrateOldDatabaseName() {
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(IMAGES_DIR, { recursive: true });
 SESSION_KEY = sessionKey();
+retireOldPasswordMode();
 const DB_FILE = path.join(DATA_DIR, 'taskule.db');
 migrateOldDatabaseName();
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
@@ -757,35 +756,46 @@ async function handleApi(req, res, pathname) {
 
   // Lock screen: the only API calls allowed before you've entered the password.
   if (pathname === '/api/session' && req.method === 'GET') {
-    let setup = false;
-    try { setup = passwordRecord() === null; } catch (err) { return sendJson(res, 200, { unlocked: false, setup: false, error: err.message }); }
-    return sendJson(res, 200, { unlocked: !setup && sessionValid(req), setup });
+    let open;
+    try { open = passwordRecord() === null; } catch (err) { return sendJson(res, 200, { unlocked: false, open: false, error: err.message }); }
+    return sendJson(res, 200, { unlocked: open || sessionValid(req), open });
   }
-  const readPassword = async () => {
+  const readJson = async () => {
     if (!/^application\/json/i.test(req.headers['content-type'] || '')) throw new HttpError(415, 'Expected JSON');
-    try { return JSON.parse(await readBody(req, { limit: 10000 })).password; } catch { throw new HttpError(400, 'Malformed JSON'); }
+    try { return JSON.parse(await readBody(req, { limit: 10000 })) || {}; } catch { throw new HttpError(400, 'Malformed JSON'); }
   };
-  // First run: create the password (only possible while none exists).
-  if (pathname === '/api/setup' && req.method === 'POST') {
-    const pw = await readPassword();
-    if (typeof pw !== 'string' || pw.length < 3 || pw.length > 1000) throw new HttpError(400, 'Use at least 3 characters');
-    if (passwordRecord() !== null) throw new HttpError(409, 'A password is already set');
-    writePasswordFile(hashPassword(pw));
-    return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': sessionCookie(newSessionToken()) });
-  }
+  const ok = (extra = {}, cookie) => send(res, 200, JSON.stringify({ ok: true, ...extra }), { 'Content-Type': 'application/json; charset=utf-8', ...(cookie ? { 'Set-Cookie': cookie } : {}) });
   if (pathname === '/api/login' && req.method === 'POST') {
-    const pw = await readPassword();
-    if (passwordRecord() === null) throw new HttpError(409, 'No password has been set yet');
-    if (!passwordMatches(pw)) {
+    const { password } = await readJson();
+    if (passwordRecord() === null) return ok({ open: true });
+    if (!passwordMatches(password)) {
       await new Promise((r) => setTimeout(r, 600)); // slow down guessing
       throw new HttpError(401, 'Wrong password');
     }
-    return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': sessionCookie(newSessionToken()) });
+    return ok({}, sessionCookie(newSessionToken()));
   }
   if (pathname === '/api/logout' && req.method === 'POST') {
     return send(res, 200, JSON.stringify({ ok: true }), { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': sessionCookie('', 0) });
   }
   if (!sessionValid(req)) throw new HttpError(401, 'Locked');
+
+  // Settings → Password: set one (from open), change it, or remove it (back to open).
+  // Changing or removing needs the current password. The window making the change stays unlocked.
+  if (pathname === '/api/password' && req.method === 'POST') {
+    const { current, password } = await readJson();
+    const had = passwordRecord() !== null;
+    if (had && !passwordMatches(current)) {
+      await new Promise((r) => setTimeout(r, 600));
+      throw new HttpError(403, 'The current password isn’t right');
+    }
+    if (password === null) {
+      try { fs.unlinkSync(PASSWORD_FILE); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+      return ok({ open: true }, sessionCookie('', 0));
+    }
+    if (typeof password !== 'string' || password.length < 3 || password.length > 1000) throw new HttpError(400, 'Use at least 3 characters');
+    writePasswordFile(hashPassword(password));
+    return ok({ open: false }, sessionCookie(newSessionToken()));
+  }
 
   // Image upload: raw bytes with an image/* content type (which also forces a CORS preflight).
   if (req.method === 'POST' && pathname === '/api/images') {
@@ -823,7 +833,9 @@ async function handleApi(req, res, pathname) {
 
 function serveImage(req, res, name) {
   if (!IMAGE_FILE_RE.test(name)) return send(res, 404, 'Not found');
-  if (!sessionValid(req)) return send(res, 401, 'Locked', { 'Cache-Control': 'no-store' });
+  let allowed = false;
+  try { allowed = sessionValid(req); } catch { allowed = false; } // damaged password file: refuse, never open
+  if (!allowed) return send(res, 401, 'Locked', { 'Cache-Control': 'no-store' });
   fs.readFile(path.join(IMAGES_DIR, name), (err, buf) => {
     if (err) return send(res, 404, 'Not found');
     send(res, 200, req.method === 'HEAD' ? undefined : buf, {

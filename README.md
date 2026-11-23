@@ -6,11 +6,12 @@ Local notes + tasks. Folders, a rich-text editor, inline to-dos, natural-languag
 
 Open **Taskule** from the Start menu or the Desktop shortcut. It opens in its own window.
 
-- **Password:** the app starts locked every time you open it. The first time, it asks you to create a password. The lock is enforced by the server, so it applies in a browser at http://localhost:4747 too.
-- **Lock now:** gear at the bottom of the sidebar → **Lock now** saves everything and locks immediately.
-- **Change the password:** `npm run set-password -- "new password"`. It takes effect immediately and locks anyone currently unlocked. The password is stored hashed (scrypt) in `data/password.json`, which is never committed. Forgot it? Stop Taskule, delete that file, and you'll be asked to create a new one.
+- **Password (optional):** Taskule has no password by default and opens straight away. To protect it, go to gear → **Settings… → Password → Set a password…**. From then on it asks for the password each time you open the app or browser. Change or remove it there too; both ask for the current password. The lock is enforced by the server, so it applies in a browser at http://localhost:4747 too.
+- **Lock now** (gear at the bottom of the sidebar, when a password is set) saves everything and locks immediately.
+- The password is stored hashed (scrypt) in `data/password.json`, which is never committed. Changing it locks anyone else currently unlocked. From the command line: `npm run set-password -- "new password"`, or `npm run set-password -- --none` to remove it. Forgot it? Delete `data/password.json` and Taskule opens without one.
 - **Server:** if the server is already running (for example from auto-start, below), the app uses it. Otherwise the app starts its own and stops it when you quit. Either way it uses the same notes in this folder's `data/`. The app checks every few seconds that a server is answering and starts one if not.
 - **System tray:** the **X** button hides the window to the system tray; Taskule keeps running and stays unlocked. Click the tray icon, or open Taskule from any shortcut, to bring the window back. Right-click the tray icon for **Open**, **Lock** and **Quit Taskule**. Quitting saves everything first and asks if it can't. Minimize works as usual.
+- **Quick capture from anywhere:** press **Alt + Win + Space** in any program and Taskule comes forward with a new empty line at the top of the Scratchpad and the cursor on it (if it's locked, you unlock first and then land there). It works whenever the desktop app is running, including hidden in the tray, so the app starts with Windows, quietly in the tray. Turn that off with the **Start with Windows** checkbox in the tray menu (the tray menu also has **Quick capture to Scratchpad**). Ctrl + Win + Space isn't possible, because Windows reserves it for switching keyboard input.
 - **Taskbar:** to pin it, open Taskule, right-click its taskbar button and choose **Pin to taskbar**. Clicking the pin while it's running switches to the open window, and the shortcuts are set up so Windows treats the pin and the window as one button.
 - **Desktop extras:** right-click gives Cut/Copy/Paste and spelling suggestions. `Ctrl +`/`Ctrl -`/`Ctrl 0` zoom, `F11` toggles full screen, and links open in your normal browser. Downloads ask where to save, starting in Downloads.
 
@@ -32,7 +33,7 @@ Requires **Node.js 22.13+** (uses Node's built-in SQLite). Nothing to install to
 npm start
 ```
 
-Then open **http://localhost:4747** and enter the password.
+Then open **http://localhost:4747** (and enter your password, if you've set one).
 
 ### Start automatically with Windows
 
@@ -58,7 +59,7 @@ After changing `server.js`, restart with `npm run stop` then `npm run autostart:
 ## How it works
 
 **Scratchpad** (top of the sidebar, or `Alt+S` from anywhere) is one permanent note for capturing things fast in meetings, then sorting them later. It can't be deleted, renamed or moved into a folder.
-- `Alt+S` opens it with the cursor on a fresh line at the end, ready to type. To-dos work as usual (`[ ] `) and appear near the top of the Tasks panel; the green badge counts its open ones.
+- `Alt+S` opens it with a new empty line at the top and the cursor on it, ready to type. To-dos work as usual (`[ ] `) and appear near the top of the Tasks panel; the green badge counts its open ones.
 - **Move to note…** (`Ctrl+Shift+M`) moves the selected lines (or just the line the cursor is on) to the end of another note. Pick a note (most recently edited first, type to filter) or **New note**, which is titled from the first line and created in the selected folder. Moved to-dos join a to-do list at the end of that note. **Undo** is in the toast.
 - **⋯ → Clear Scratchpad** empties it (undoable).
 
@@ -164,12 +165,13 @@ The first group can be changed in **Settings**. These are the defaults.
 | `Alt+T` | Open the Tasks panel and start a new task |
 | `Ctrl+]` | Show / hide the Tasks panel |
 | `Ctrl+,` | Settings |
-| `Alt+S` | Scratchpad (cursor on a new line, ready to type) |
+| `Alt+S` | Scratchpad (new line at the top, ready to type) |
 | `Ctrl+Shift+M` | In the Scratchpad: move selected lines to a note |
 | `Ctrl+\` | Show / hide the sidebar |
 | — | Lock (no key unless you set one) |
 | `Ctrl+Shift+F` | Search |
 | **Always** | |
+| `Alt+Win+Space` | Desktop app, from anywhere in Windows: quick capture to the Scratchpad |
 | `/` | Search (when you are not typing) |
 | `@` | Insert menu (date, image, table, …) |
 | `@date` … | Insert a date |
