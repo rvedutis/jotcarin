@@ -156,6 +156,48 @@ try {
   r = await c.call('GET', '/api/state');
   check('after wipe: only an empty Scratchpad', r.json.notes.length === 1 && r.json.notes[0].id === 'scratchpad' && r.json.folders.length === 0);
 
+  // ---------------------------------------------------------------- sidebar order
+  await c.call('POST', '/api/folders', { id: 'fa', name: 'A' });
+  await c.call('POST', '/api/notes', { id: 'p1', title: 'P1', content: doc('x') });
+  r = await c.call('GET', '/api/state');
+  const p1 = r.json.notes.find((n) => n.id === 'p1');
+  check('new items have no position yet', p1.position === null && r.json.folders.find((x) => x.id === 'fa').position === null);
+  r = await c.call('PATCH', '/api/notes/p1', { position: 2048 });
+  check('note position saved', r.status === 200 && r.json.position === 2048, r.json);
+  check('reordering is not an edit (updatedAt kept)', r.json.updatedAt === p1.updatedAt && r.json.version === p1.version, r.json);
+  r = await c.call('PATCH', '/api/notes/p1', { folderId: 'fa', position: null });
+  check('moving into a folder is not an edit either', r.status === 200 && r.json.folderId === 'fa' && r.json.position === null && r.json.updatedAt === p1.updatedAt, r.json);
+  r = await c.call('PATCH', '/api/folders/fa', { position: 1024 });
+  check('folder position saved', r.status === 200 && r.json.position === 1024, r.json);
+  r = await c.call('PATCH', '/api/notes/p1', { position: 'first' });
+  check('bad position refused', r.status === 400);
+
+  // ---------------------------------------------------------------- date password (mmddyyyy, US Eastern)
+  {
+    const pwFile = path.join(tmp, 'password.json');
+    const saved = fs.readFileSync(pwFile);
+    fs.writeFileSync(pwFile, JSON.stringify({ mode: 'date' }));
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+    const today = `${p.month}${p.day}${p.year}`;
+    const dm = client(port);
+    r = await dm.call('GET', '/api/session');
+    check('date mode is a set password (no setup screen)', r.json.setup === false && !r.json.error, r.json);
+    r = await dm.call('POST', '/api/login', { password: 'correct horse' });
+    check('old fixed password no longer works in date mode', r.status === 401);
+    r = await dm.call('POST', '/api/login', { password: '01012000' });
+    check('another date is refused', r.status === 401);
+    r = await dm.call('POST', '/api/login', { password: `${p.month}/${p.day}/${p.year}` });
+    check('separators are refused (mmddyyyy only)', r.status === 401);
+    r = await dm.call('POST', '/api/login', { password: today });
+    check(`today's date (${today}) unlocks`, r.status === 200);
+    r = await dm.call('GET', '/api/state');
+    check('unlocked in date mode', r.status === 200);
+    r = await c.call('GET', '/api/state');
+    check('switching to date mode locks existing sessions', r.status === 401);
+    fs.writeFileSync(pwFile, saved);
+    await c.call('POST', '/api/login', { password: 'correct horse' });
+  }
+
   // ---------------------------------------------------------------- damaged password file
   await c.call('POST', '/api/notes', { id: 'keep', title: 'Keep me', content: doc('important') });
   const pwFile = path.join(tmp, 'password.json');

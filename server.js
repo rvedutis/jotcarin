@@ -37,6 +37,8 @@ function passwordRecord() {
   }
   let rec;
   try { rec = JSON.parse(raw); } catch { rec = null; }
+  // Date mode: the password is today's date as mmddyyyy (US Eastern), e.g. 11232026.
+  if (rec && rec.mode === 'date') return { mode: 'date' };
   // A damaged password file must never fall back to "no password" (that would let anyone set one).
   if (!rec || typeof rec.salt !== 'string' || !/^[0-9a-f]{64}$/.test(rec.hash)) {
     throw new HttpError(500, 'The password file is damaged. Run "npm run set-password" to set a new password.');
@@ -52,10 +54,21 @@ function writePasswordFile(rec) {
   fs.writeFileSync(tmp, JSON.stringify(rec, null, 2) + '\n', { mode: 0o600 });
   fs.renameSync(tmp, PASSWORD_FILE); // atomic: never a half-written password file
 }
+/** Today's date in US Eastern time as mmddyyyy (the password in date mode). */
+function todayCode(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(now).map((p) => [p.type, p.value]));
+  return `${parts.month}${parts.day}${parts.year}`;
+}
 function passwordMatches(pw) {
   if (typeof pw !== 'string' || pw.length > 1000) return false;
   const rec = passwordRecord();
   if (!rec) return false;
+  if (rec.mode === 'date') {
+    const want = Buffer.from(todayCode());
+    const got = Buffer.from(pw.trim());
+    return want.length === got.length && crypto.timingSafeEqual(want, got);
+  }
   return crypto.timingSafeEqual(crypto.scryptSync(pw, rec.salt, 32), Buffer.from(rec.hash, 'hex'));
 }
 
@@ -77,7 +90,7 @@ function signSession(issued) {
   // Changing the password invalidates every existing session (the hash is part of the signature).
   const rec = passwordRecord();
   if (!rec) return null;
-  return crypto.createHmac('sha256', SESSION_KEY).update(`${issued}.${rec.hash}`).digest('base64url');
+  return crypto.createHmac('sha256', SESSION_KEY).update(`${issued}.${rec.hash || rec.mode}`).digest('base64url');
 }
 function newSessionToken() {
   const issued = Date.now();
@@ -180,6 +193,8 @@ function addColumn(table, col, def) {
 addColumn('tasks', 'body', "TEXT NOT NULL DEFAULT ''"); // standalone task details
 addColumn('tasks', 'due', 'TEXT');                       // standalone task due date (YYYY-MM-DD)
 addColumn('notes', 'version', 'INTEGER NOT NULL DEFAULT 0'); // bumped on every text change, so a stale window can't overwrite newer text
+addColumn('folders', 'position', 'REAL'); // your own order in the sidebar (null = after ordered ones, by name)
+addColumn('notes', 'position', 'REAL');
 
 // ---------------------------------------------------------------- database health
 // quick_check reads the whole file and verifies its structure. If it ever fails, the server
@@ -296,6 +311,8 @@ const q = {
   delFolder: db.prepare('DELETE FROM folders WHERE id = ?'),
   delNote: db.prepare('DELETE FROM notes WHERE id = ?'),
   delTask: db.prepare('DELETE FROM tasks WHERE id = ?'),
+  setFolderPos: db.prepare('UPDATE folders SET position = ? WHERE id = ?'),
+  setNotePos: db.prepare('UPDATE notes SET position = ? WHERE id = ?'),
   isDescendant: db.prepare(`
     WITH RECURSIVE sub(id) AS (
       SELECT id FROM folders WHERE id = ?
@@ -316,8 +333,8 @@ if (dbHealth.ok) ensureScratchpad();
 backupIfDue(12 * 3600 * 1000);
 setInterval(() => backupIfDue(24 * 3600 * 1000), 3600 * 1000).unref();
 
-const toFolder = (r) => r && ({ id: r.id, parentId: r.parent_id, name: r.name, createdAt: r.created_at, updatedAt: r.updated_at });
-const toNote = (r) => r && ({ id: r.id, folderId: r.folder_id, title: r.title, content: r.content, createdAt: r.created_at, updatedAt: r.updated_at, version: r.version || 0 });
+const toFolder = (r) => r && ({ id: r.id, parentId: r.parent_id, name: r.name, position: r.position ?? null, createdAt: r.created_at, updatedAt: r.updated_at });
+const toNote = (r) => r && ({ id: r.id, folderId: r.folder_id, title: r.title, content: r.content, position: r.position ?? null, createdAt: r.created_at, updatedAt: r.updated_at, version: r.version || 0 });
 const toTask = (r) => r && ({ id: r.id, text: r.text, body: r.body || '', due: r.due || null, done: !!r.done, createdAt: r.created_at, completedAt: r.completed_at, updatedAt: r.updated_at });
 
 // ---------------------------------------------------------------- validation
@@ -354,6 +371,12 @@ function dueDate(v) {
   const [y, m, d] = v.split('-').map(Number);
   const t = new Date(Date.UTC(y, m - 1, d));
   if (t.getUTCFullYear() !== y || t.getUTCMonth() !== m - 1 || t.getUTCDate() !== d) throw new HttpError(400, 'That due date doesn’t exist');
+  return v;
+}
+/** A sidebar position: null (unordered) or a finite number. */
+function position(v) {
+  if (v === null) return null;
+  if (typeof v !== 'number' || !Number.isFinite(v)) throw new HttpError(400, 'position must be a number or null');
   return v;
 }
 function ts(v, fallback) { return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback; }
@@ -396,6 +419,7 @@ route('PATCH', /^\/api\/folders\/([^/]+)$/, ([fid], b) => tx(() => {
     }
   }
   q.updFolder.run(parentId, name, Date.now(), fid);
+  if (b.position !== undefined) q.setFolderPos.run(position(b.position), fid);
   return toFolder(q.getFolder.get(fid));
 }));
 
@@ -438,7 +462,9 @@ route('PATCH', /^\/api\/notes\/([^/]+)$/, ([nid], b) => tx(() => {
   if (textChanged && Number.isInteger(b.baseVersion) && b.baseVersion !== version) {
     throw new HttpError(409, 'This note was changed somewhere else', { note: toNote(cur) });
   }
-  q.updNote.run(folderId, title, content, Date.now(), textChanged ? version + 1 : version, nid);
+  // Only a change to the title or text counts as an edit (moving or reordering doesn't).
+  q.updNote.run(folderId, title, content, textChanged ? Date.now() : cur.updated_at, textChanged ? version + 1 : version, nid);
+  if (b.position !== undefined) q.setNotePos.run(position(b.position), nid);
   const row = toNote(q.getNote.get(nid));
   delete row.content; // client already has it; keep responses small
   return row;

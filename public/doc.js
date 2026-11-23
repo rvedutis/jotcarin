@@ -29,6 +29,25 @@ export function tagDatesInDoc(doc) {
   return { doc: copy, count };
 }
 
+/**
+ * To-dos saved before creation dates were recorded get created: 0 ("unknown"), so the editor
+ * can tell them apart from brand-new ones (which it stamps with the current time).
+ * Returns { doc, count }: count is how many were marked.
+ */
+export function markUndatedTasks(doc) {
+  let count = 0;
+  const copy = structuredClone(doc);
+  const walk = (n) => {
+    if (n.type === 'taskItem' && (n.attrs?.created === undefined || n.attrs?.created === null)) {
+      n.attrs = { ...(n.attrs || {}), created: 0 };
+      count++;
+    }
+    n.content?.forEach(walk);
+  };
+  walk(copy);
+  return { doc: copy, count };
+}
+
 export const EMPTY_DOC = { type: 'doc', content: [{ type: 'paragraph' }] };
 
 /** Parse stored note content. Returns null for legacy (markdown) content that needs migrating. */
@@ -66,7 +85,7 @@ function taskParts(item) {
   return { first: first?.type === 'paragraph' ? first : null, body, bodyEditable };
 }
 
-/** Every to-do in document order: { index, done, text, nodes, body, bodyEditable, due }. */
+/** Every to-do in document order: { index, done, text, nodes, body, bodyEditable, due, created, edited }. */
 export function docTasks(doc) {
   const out = [];
   const walk = (n) => {
@@ -80,6 +99,8 @@ export function docTasks(doc) {
         body,
         bodyEditable,
         due: /^\d{4}-\d{2}-\d{2}$/.test(n.attrs?.due || '') ? n.attrs.due : null,
+        created: n.attrs?.created > 0 ? n.attrs.created : null, // null = unknown (added before dates were recorded)
+        edited: n.attrs?.edited > 0 ? n.attrs.edited : null,
       });
     }
     n.content?.forEach(walk);
@@ -115,7 +136,8 @@ export function updateTask(doc, index, { title, body, due } = {}) {
   const item = path[path.length - 1];
   item.content = item.content?.length ? item.content : [{ type: 'paragraph' }];
   if (item.content[0].type !== 'paragraph') item.content.unshift({ type: 'paragraph' });
-  if (due !== undefined) item.attrs = { ...(item.attrs || {}), due: due || null };
+  item.attrs = { ...(item.attrs || {}), edited: Date.now() }; // changed from the Tasks panel
+  if (due !== undefined) item.attrs = { ...item.attrs, due: due || null };
   if (title !== undefined) {
     const inline = textToInline(String(title).replace(/\s+/g, ' ').trim());
     item.content[0] = inline.length ? { ...item.content[0], content: inline } : { type: 'paragraph', ...(item.content[0].attrs ? { attrs: item.content[0].attrs } : {}) };

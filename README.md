@@ -7,8 +7,8 @@ Local notes + tasks. Folders, a rich-text editor, inline to-dos, natural-languag
 Open **Taskule** from the Start menu or the Desktop shortcut. It opens in its own window.
 
 - **Password:** the app starts locked every time you open it. The first time, it asks you to create a password. The lock is enforced by the server, so it applies in a browser at http://localhost:4747 too.
-- **Lock now:** the lock icon at the bottom of the sidebar saves everything and locks immediately.
-- **Change the password:** `npm run set-password -- "new password"`. It takes effect immediately and locks anyone currently unlocked. The password is stored hashed (scrypt) in `data/password.json`, which is never committed. Forgot it? Stop Taskule, delete that file, and you'll be asked to create a new one.
+- **Lock now:** gear at the bottom of the sidebar → **Lock now** saves everything and locks immediately.
+- **Change the password:** `npm run set-password -- "new password"`, or `npm run set-password -- --date` to make the password always today's date as `mmddyyyy` (US Eastern time, no separators). It takes effect immediately and locks anyone currently unlocked. The password is stored hashed (scrypt) in `data/password.json`, which is never committed. Forgot it? Stop Taskule, delete that file, and you'll be asked to create a new one.
 - **Server:** if the server is already running (for example from auto-start, below), the app uses it. Otherwise the app starts its own and stops it when you quit. Either way it uses the same notes in this folder's `data/`. The app checks every few seconds that a server is answering and starts one if not.
 - **System tray:** the **X** button hides the window to the system tray; Taskule keeps running and stays unlocked. Click the tray icon, or open Taskule from any shortcut, to bring the window back. Right-click the tray icon for **Open**, **Lock** and **Quit Taskule**. Quitting saves everything first and asks if it can't. Minimize works as usual.
 - **Taskbar:** to pin it, open Taskule, right-click its taskbar button and choose **Pin to taskbar**. Clicking the pin while it's running switches to the open window, and the shortcuts are set up so Windows treats the pin and the window as one button.
@@ -64,14 +64,17 @@ After changing `server.js`, restart with `npm run stop` then `npm run autostart:
 
 **Sidebar** — the panel button at the top of the sidebar (or `Ctrl+\`) hides it to give notes the full window. While it's hidden, move the mouse to the left edge (or over the small panel button at top left) and it slides out; it stays while you're using it (typing in search, a menu, renaming) and slides away when you click back in the page. Click the **pin** in it, the small button, or `Ctrl+\` again to keep it open. Your choice is remembered. The Tasks panel on the right works the same way.
 
-**Settings** (gear at the bottom of the sidebar, or `Ctrl+,`):
+**Gear menu** (bottom of the sidebar): **Settings…**, **Download a copy…**, **Lock now** and **Wipe database…**, all in one place.
+
+**Settings** (gear → Settings…, or `Ctrl+,`):
 - **Appearance:** Light, Dark, or Match system (follows Windows' light/dark setting as it changes).
 - **Keyboard shortcuts:** click a shortcut and press new keys to change it; Backspace removes it, Esc cancels. Keys the editor or window already use (like `Ctrl+B` or `F11`) can't be taken, and plain letters need `Ctrl` or `Alt`. Picking keys another action uses moves them to the new action, and you're told which one lost them. **Reset** puts one back; **Reset all shortcuts** puts them all back.
 - Settings are kept per device: the desktop app and each browser remember their own.
 
 **Notes** live in the left column inside nested folders.
 - `+` buttons create notes/folders inside the selected folder (click **NOTES** to select top level).
-- Drag notes and folders to reorganize, or right-click → *Move to…*. Double-click a folder (or F2) to rename.
+- **Arrange them your way:** drag a note or folder and drop it on the top or bottom edge of another to put it before or after it (a blue line shows where); drop it on the middle of a folder to put it inside. Or right-click → **Move up** / **Move down** (`Alt+↑` / `Alt+↓` on a selected row), or **Move to…** for another folder. Folders stay above notes at each level. Items you haven't arranged are listed alphabetically after the arranged ones. Reordering or moving a note doesn't count as editing it. The Tasks panel and downloads follow the same order.
+- Double-click a folder (or F2) to rename.
 
 **Editor** — a normal WYSIWYG editor: headings, bold, italic, underline, strikethrough, code, links, bullet/numbered lists, quotes, code blocks, dividers and to-dos. Markdown-style shortcuts also work as you type (`# ` heading, `- ` bullet, `1. ` numbered, `[ ] ` to-do, `**bold**`, `> ` quote).
 
@@ -102,7 +105,8 @@ Other ways in:
 - *Standalone tasks* — type into **Add a task** at the top of the panel.
 - *Note to-dos* — type `[ ] ` at the start of a line in any note (or click **To-do** in the toolbar). They're grouped by note in the panel.
 - **Due soon:** open tasks with a due date coming up are gathered at the top under **Overdue**, **Today**, **Tomorrow** and **Later this week** (through Sunday), each showing which note it's from. A group only appears when something is in it. These tasks also stay in their normal group below.
-- **Completed** sits at the bottom on a faintly shaded background.
+- **Completed** sits at the bottom, below a darker divider, on a faintly shaded background.
+- **When it was added:** each task shows a faint **Added …** date next to its title (hover for the exact time, and when it was last changed). This is separate from the due date. To-dos written in notes before this was added have no recorded date, so they show none. A note's footer shows when it was created and last edited.
 - **Edit right in the panel:** click a task's title to change it (Enter saves, Esc cancels). **Details**: free text under the title (hover a task and click the lines icon to add some). **Due date**: hover and click the calendar, then type plain English (“tomorrow”, “next fri”, “12/1”), pick a suggestion, or use the calendar. Overdue dates are red, today's green.
 - For a note to-do, its details are the lines written under it inside the note, and its due date shows as a badge at the end of the line. Click the badge to change it. Details that hold formatting (a table, code block…) are edited in the note instead.
 - Checking a task anywhere (the panel, the note, or `Ctrl+Enter` in the editor) moves it to **Completed**, still grouped the same way. Deletes can be undone from the toast.
@@ -129,7 +133,7 @@ Other ways in:
 
 **Search** (`/` or `Ctrl+Shift+F`) matches note titles, note text, dates, tasks and folder names. Clicking a note result opens it with the match selected.
 
-**Download** (bottom-left) saves a copy of everything — pick one:
+**Download** (gear → Download a copy…) saves a copy of everything — pick one:
 
 | Option | You get |
 | --- | --- |
@@ -138,7 +142,7 @@ Other ways in:
 | **PDF (.pdf)** | A print-ready copy of the same content as the Word export, with page numbers. |
 | **Database backup (.zip)** | An exact snapshot of `taskule.db` plus all images and a `RESTORE.txt`. Safe to take while the app is running. |
 
-**Wipe database** (bottom-left) deletes everything after you type `delete`. A safety backup is always made first (no backup, no wipe), and image files are kept for 30 days so that backup can be restored with its pictures.
+**Wipe database** (gear → Wipe database…) deletes everything after you type `delete`. A safety backup is always made first (no backup, no wipe), and image files are kept for 30 days so that backup can be restored with its pictures.
 
 ### Backups and restoring
 

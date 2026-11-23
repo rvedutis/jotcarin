@@ -1,5 +1,5 @@
 // Tests for note to-do helpers: details (body), due dates and editing.   node test/doc.test.mjs
-import { docTasks, updateTask, textToInline, setTaskChecked } from '../public/doc.js';
+import { docTasks, updateTask, textToInline, setTaskChecked, markUndatedTasks } from '../public/doc.js';
 
 let fail = 0;
 let pass = 0;
@@ -48,5 +48,16 @@ check('checking keeps the due date', docTasks(setTaskChecked(doc, 2, true))[2].d
 check('textToInline: no dates → one text node', JSON.stringify(textToInline('hello')) === JSON.stringify([t('hello')]));
 check('textToInline: empty → nothing', textToInline('').length === 0);
 
+// created / edited stamps
+const stamped = { type: 'doc', content: [{ type: 'taskList', content: [item({ created: 1700000000000, edited: 1700000500000 }, p(t('Dated'))), item({}, p(t('Old'))), item({ created: 0 }, p(t('Unknown')))] }] };
+const st = docTasks(stamped);
+check('created/edited read from the to-do', st[0].created === 1700000000000 && st[0].edited === 1700000500000);
+check('no date recorded → null', st[1].created === null && st[2].created === null);
+const marked = markUndatedTasks(stamped);
+check('old to-dos marked unknown (0), dated ones untouched', marked.count === 1 && marked.doc.content[0].content[1].attrs.created === 0 && marked.doc.content[0].content[0].attrs.created === 1700000000000);
+check('marking again changes nothing', markUndatedTasks(marked.doc).count === 0);
+const before = Date.now();
+const ed = docTasks(updateTask(stamped, 0, { title: 'Dated!' }))[0];
+check('editing in the panel updates edited, keeps created', ed.edited >= before && ed.created === 1700000000000);
 console.log(fail ? `${fail} doc test(s) failed, ${pass} passed` : `all ${pass} doc checks passed`);
 if (fail) process.exit(1);

@@ -178,9 +178,75 @@ const DueTaskItem = TaskItem.extend({
         parseHTML: (el) => (/^\d{4}-\d{2}-\d{2}$/.test(el.getAttribute('data-due') || '') ? el.getAttribute('data-due') : null),
         renderHTML: (attrs) => (attrs.due ? { 'data-due': attrs.due } : {}),
       },
+      // When the to-do was added and last changed (ms since 1970). 0 = from before these were
+      // recorded (unknown). A new to-do made with Enter starts fresh rather than copying them.
+      created: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el) => (/^\d+$/.test(el.getAttribute('data-created') || '') ? Number(el.getAttribute('data-created')) : null),
+        renderHTML: (attrs) => (attrs.created ? { 'data-created': String(attrs.created) } : {}),
+      },
+      edited: {
+        default: null,
+        keepOnSplit: false,
+        parseHTML: (el) => (/^\d+$/.test(el.getAttribute('data-edited') || '') ? Number(el.getAttribute('data-edited')) : null),
+        renderHTML: (attrs) => (attrs.edited ? { 'data-edited': String(attrs.edited) } : {}),
+      },
     };
   },
 });
+
+/**
+ * Stamps to-dos: a new one gets "created" (and "edited") = now; changing a to-do's text
+ * updates its "edited" (at most once a minute). Loading content from storage
+ * (setContent without an update) is never treated as an edit.
+ */
+function taskStamps() {
+  const key = new PluginKey('taskStamps');
+  return new Plugin({
+    key,
+    appendTransaction(trs, _old, state) {
+      if (!trs.some((t) => t.docChanged) || trs.some((t) => t.getMeta(key) || t.getMeta('preventUpdate'))) return null;
+      const now = Date.now();
+      const touched = new Set();
+      // Positions in the final document that these transactions changed.
+      trs.forEach((t, k) => {
+        if (!t.docChanged) return;
+        t.mapping.maps.forEach((map, i) => {
+          map.forEach((_oS, _oE, nS, nE) => {
+            let from = nS;
+            let to = nE;
+            const rest = [t.mapping.slice(i + 1), ...trs.slice(k + 1).map((x) => x.mapping)];
+            for (const m of rest) { from = m.map(from, -1); to = m.map(to, 1); }
+            for (const p of [from, to]) {
+              const $p = state.doc.resolve(Math.max(0, Math.min(p, state.doc.content.size)));
+              for (let d = $p.depth; d > 0; d--) {
+                if ($p.node(d).type.name === 'taskItem') { touched.add($p.before(d)); break; } // innermost to-do only
+              }
+            }
+          });
+        });
+      });
+      const tr = state.tr;
+      let changed = false;
+      state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'taskItem') return true;
+        const a = node.attrs;
+        if (a.created == null) {
+          tr.setNodeMarkup(pos, undefined, { ...a, created: now, edited: now });
+          changed = true;
+        } else if (touched.has(pos) && (!a.edited || now - a.edited > 60_000)) {
+          tr.setNodeMarkup(pos, undefined, { ...a, edited: now });
+          changed = true;
+        }
+        return true;
+      });
+      if (!changed) return null;
+      tr.setMeta(key, true);
+      return tr;
+    },
+  });
+}
 
 function dueBadges(onTaskOpen) {
   return new Plugin({
@@ -252,7 +318,7 @@ function extensions({ placeholder = '', onLinkShortcut, onImageRequest, onImageE
     }),
     TaskList,
     DueTaskItem.configure({ nested: true }),
-    Extension.create({ name: 'taskDueBadges', addProseMirrorPlugins: () => [dueBadges(onTaskOpen)] }),
+    Extension.create({ name: 'taskDueBadges', addProseMirrorPlugins: () => [dueBadges(onTaskOpen), taskStamps()] }),
     Table.configure({ resizable: false, renderWrapper: true }),
     TableRow,
     TableHeader,

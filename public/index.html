@@ -52,12 +52,8 @@
 
       <div class="sidebar-footer">
         <div class="save-status" id="save-status" aria-live="polite"><span class="dot"></span><span class="label">All changes saved</span></div>
-        <div class="footer-actions">
-          <button class="btn-download" id="download" type="button" title="Download everything as Word, Markdown or PDF — or a database backup"></button>
-          <button class="btn-settings" id="settings-btn" type="button" title="Settings" aria-label="Settings"></button>
-          <button class="btn-lock" id="lock-now" type="button" title="Lock Taskule (asks for the password again)" aria-label="Lock"></button>
-          <button class="btn-wipe" id="wipe" type="button" title="Delete all notes, folders and tasks"></button>
-        </div>
+        <!-- One menu for Settings, Download, Lock and Wipe -->
+        <button class="btn-settings" id="settings-btn" type="button" title="Settings" aria-label="Settings and more" aria-haspopup="menu"></button>
       </div>
     </aside>
     <div id="scrim"></div>

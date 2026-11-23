@@ -1,5 +1,5 @@
 import { renderForEditor, esc } from './markdown.js';
-import { parseDoc, docTasks, docText, setTaskChecked, removeTask, updateTask, inlineHtml, plainTaskHtml, tagDatesInDoc } from './doc.js';
+import { parseDoc, docTasks, docText, setTaskChecked, removeTask, updateTask, inlineHtml, plainTaskHtml, tagDatesInDoc, markUndatedTasks } from './doc.js';
 import { formatDate, todayISO, daysFromToday, parseExact, suggestDates } from './dates.js';
 import { attachDateAutocomplete } from './datepopup.js';
 import { createNoteEditor, htmlToDoc, selectFirstMatch, selectTask, insertImageFiles } from './vendor/editor.js';
@@ -205,6 +205,8 @@ const P = {
   columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>',
   pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  arrowUp: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  arrowDown: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
   panelRightClose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>',
   panelRightOpen: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/>',
   settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
@@ -300,10 +302,82 @@ function findNoteTask(note, index, text) {
   const tasks = noteTasks(note);
   return tasks.find((t) => t.index === index && t.text === text) || tasks.find((t) => t.text === text) || null;
 }
-function sortedNotes() {
-  return [...S.notes.values()].sort((a, b) => isScratch(b.id) - isScratch(a.id) ||
-    collator.compare(folderPath(a.folderId), folderPath(b.folderId)) || collator.compare(noteTitle(a), noteTitle(b)));
+/**
+ * Sidebar order: items you've arranged (they have a position) first, in that order; the rest
+ * after them alphabetically. Folders are listed before notes at each level.
+ */
+const byOrder = (name) => (a, b) => ((a.position ?? Infinity) - (b.position ?? Infinity)) || collator.compare(name(a), name(b)) || ((a.createdAt || 0) - (b.createdAt || 0));
+const parentOf = (kind, x) => {
+  const p = kind === 'folder' ? x.parentId : x.folderId;
+  return p && S.folders.has(p) ? p : null;
+};
+function childFolders(pid) { return [...S.folders.values()].filter((x) => parentOf('folder', x) === (pid || null)).sort(byOrder((x) => x.name)); }
+function childNotes(fid) { return [...S.notes.values()].filter((x) => !isScratch(x.id) && parentOf('note', x) === (fid || null)).sort(byOrder(noteTitle)); }
+/** Notes in sidebar order (Scratchpad first): folders depth-first, each folder's notes after its subfolders' as shown. */
+function treeOrderNotes() {
+  const out = [];
+  const walk = (pid) => {
+    for (const fo of childFolders(pid)) walk(fo.id);
+    out.push(...childNotes(pid));
+  };
+  if (S.notes.has(SCRATCH)) out.push(S.notes.get(SCRATCH));
+  walk(null);
+  return out;
 }
+
+/**
+ * Put a folder or note at a spot in the sidebar: inside `parentId`, before/after `refId`
+ * (or at the end). Positions are renumbered for that list and saved; a change of folder is
+ * saved with it.
+ */
+function placeItem(kind, id, parentId, refId = null, where = 'end') {
+  const item = kind === 'folder' ? S.folders.get(id) : S.notes.get(id);
+  if (!item || (kind === 'note' && isScratch(id))) return false;
+  parentId = parentId || null;
+  if (kind === 'folder' && parentId && (parentId === id || isFolderWithin(parentId, id))) {
+    toast("A folder can't go inside itself", { type: 'error' });
+    return false;
+  }
+  const siblings = (kind === 'folder' ? childFolders(parentId) : childNotes(parentId)).filter((x) => x.id !== id);
+  let idx = siblings.length;
+  if (refId) {
+    const i = siblings.findIndex((x) => x.id === refId);
+    if (i >= 0) idx = where === 'before' ? i : i + 1;
+  }
+  const order = [...siblings.slice(0, idx), item, ...siblings.slice(idx)];
+  const moved = parentOf(kind, item) !== parentId;
+  flushNotes();
+  if (moved) {
+    if (kind === 'folder') item.parentId = parentId; else item.folderId = parentId;
+    if (parentId) { S.expanded.add(parentId); saveExpanded(); }
+  }
+  order.forEach((x, i) => {
+    const pos = (i + 1) * 1024;
+    const isItem = x.id === id;
+    if (x.position === pos && !(isItem && moved)) return;
+    x.position = pos;
+    const body = isItem && moved ? { [kind === 'folder' ? 'parentId' : 'folderId']: parentId, position: pos } : { position: pos };
+    sync.push({ method: 'PATCH', url: `/api/${kind === 'folder' ? 'folders' : 'notes'}/${x.id}`, body });
+  });
+  if (kind === 'note' && moved && S.view.type === 'note' && S.view.id === id) { S.selectedFolderId = parentId; renderCrumbs(); }
+  refreshAll();
+  return true;
+}
+
+/** Move up/down one place among its siblings (right-click menu, Alt+↑/↓). */
+function nudgeItem(kind, id, dir) {
+  const item = kind === 'folder' ? S.folders.get(id) : S.notes.get(id);
+  if (!item) return;
+  const pid = parentOf(kind, item);
+  const sibs = kind === 'folder' ? childFolders(pid) : childNotes(pid);
+  const i = sibs.findIndex((x) => x.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= sibs.length) return;
+  placeItem(kind, id, pid, sibs[j].id, dir < 0 ? 'before' : 'after');
+  setTimeout(() => $(`.tree-row[data-kind="${kind}"][data-id="${id}"]`)?.focus());
+}
+
+function sortedNotes() { return treeOrderNotes(); }
 
 /* =====================================================================
    Sync — a single ordered queue of writes with retry. Nothing is lost
@@ -683,7 +757,8 @@ function moveFolder(id, parentId) {
   if (parentId && isFolderWithin(parentId, id)) { toast("A folder can't go inside itself", { type: 'error' }); return; }
   f.parentId = parentId;
   if (parentId) { S.expanded.add(parentId); saveExpanded(); }
-  sync.push({ method: 'PATCH', url: `/api/folders/${id}`, body: { parentId } });
+  f.position = null; // goes to the end of its new folder
+  sync.push({ method: 'PATCH', url: `/api/folders/${id}`, body: { parentId, position: null } });
   refreshAll();
   toast(`Moved “${f.name}” to ${parentId ? `“${S.folders.get(parentId).name}”` : 'top level'}`);
 }
@@ -735,7 +810,8 @@ function moveNote(id, folderId) {
   flushNotes();
   n.folderId = folderId;
   if (folderId) { S.expanded.add(folderId); saveExpanded(); }
-  sync.push({ method: 'PATCH', url: `/api/notes/${id}`, body: { folderId } });
+  n.position = null; // goes to the end of its new folder
+  sync.push({ method: 'PATCH', url: `/api/notes/${id}`, body: { folderId, position: null } });
   if (S.view.type === 'note' && S.view.id === id) { S.selectedFolderId = folderId; renderCrumbs(); }
   refreshAll();
   toast(`Moved “${noteTitle(n)}” to ${folderId ? `“${S.folders.get(folderId).name}”` : 'top level'}`);
@@ -1103,7 +1179,7 @@ function renderTree() {
 
   const level = (pid, depth) => {
     let h = '';
-    const folders = (kids.get(pid) || []).sort((a, b) => collator.compare(a.name, b.name));
+    const folders = (kids.get(pid) || []).sort(byOrder((x) => x.name));
     for (const f of folders) {
       const open = S.expanded.has(f.id);
       const count = countDeep(f.id);
@@ -1119,7 +1195,7 @@ function renderTree() {
       </div>`;
       if (open) h += level(f.id, depth + 1);
     }
-    const notes = (notesBy.get(pid) || []).sort((a, b) => collator.compare(noteTitle(a), noteTitle(b)) || a.createdAt - b.createdAt);
+    const notes = (notesBy.get(pid) || []).sort(byOrder(noteTitle));
     for (const n of notes) {
       const open = noteTasks(n).filter((t) => !t.done).length;
       h += `<div class="tree-row note${activeNote === n.id ? ' active' : ''}" data-kind="note" data-id="${n.id}" draggable="true" tabindex="0" role="treeitem" style="--depth:${depth}">
@@ -1191,7 +1267,14 @@ function newFolderAction(parentId = S.selectedFolderId) {
 
 function rowMenu(row, at) {
   const { kind, id } = row.dataset;
-  const items = kind === 'folder'
+  const item = kind === 'folder' ? S.folders.get(id) : S.notes.get(id);
+  const sibs = item ? (kind === 'folder' ? childFolders(parentOf('folder', item)) : childNotes(parentOf('note', item))) : [];
+  const at0 = sibs.findIndex((x) => x.id === id);
+  const order = [
+    ...(at0 > 0 ? [{ label: 'Move up', icon: I.arrowUp, run: () => nudgeItem(kind, id, -1) }] : []),
+    ...(at0 >= 0 && at0 < sibs.length - 1 ? [{ label: 'Move down', icon: I.arrowDown, run: () => nudgeItem(kind, id, 1) }] : []),
+  ];
+  const items0 = kind === 'folder'
     ? [
       { label: 'New note here', icon: I.notePlus, run: () => createNote(id) },
       { label: 'New subfolder', icon: I.folderPlus, run: () => newFolderAction(id) },
@@ -1208,6 +1291,9 @@ function rowMenu(row, at) {
       'sep',
       { label: 'Delete note', icon: I.trash, danger: true, run: () => deleteNote(id) },
     ];
+  // Move up/down sit right after "Move to…"
+  const k = items0.findIndex((x) => x !== 'sep' && x.label === 'Move to…');
+  const items = [...items0.slice(0, k + 1), ...order, ...items0.slice(k + 1)];
   row.classList.add('menu-open');
   showMenu(at, items, () => row.classList.remove('menu-open'));
 }
@@ -1252,7 +1338,8 @@ function setupTree() {
     const rows = $$('.tree-row', tree);
     const i = rows.indexOf(row);
     const { kind, id } = row.dataset;
-    if (e.key === 'ArrowDown') { e.preventDefault(); rows[i + 1]?.focus(); }
+    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); nudgeItem(kind, id, e.key === 'ArrowUp' ? -1 : 1); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); rows[i + 1]?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); rows[i - 1]?.focus(); }
     else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
     else if (e.key === 'ArrowRight' && kind === 'folder' && !S.expanded.has(id)) { toggleFolder(id, true); renderTree(); $(`.tree-row[data-id="${id}"]`)?.focus(); }
@@ -1263,20 +1350,44 @@ function setupTree() {
   });
 
   // ---- drag & drop
+  // Drop on the top or bottom edge of a row to put the item before/after it; drop on the
+  // middle of a folder to put it inside; drop on empty space for the end of the top level.
+  // Folders stay above notes, so a note dropped on a folder goes into it.
   let drag = null;
   let hoverTimer = null;
   const DT = 'application/x-taskule';
-  const canDrop = (targetFolderId) => {
-    if (!drag) return false;
-    if (drag.kind === 'folder') {
-      if (targetFolderId && isFolderWithin(targetFolderId, drag.id)) return false;
-      return (S.folders.get(drag.id)?.parentId || null) !== (targetFolderId || null);
-    }
-    return (S.notes.get(drag.id)?.folderId || null) !== (targetFolderId || null);
-  };
   const clearMarks = () => {
-    $$('.drop-target', tree).forEach((el) => el.classList.remove('drop-target'));
+    $$('.drop-target, .drop-before, .drop-after', tree).forEach((el) => el.classList.remove('drop-target', 'drop-before', 'drop-after'));
     tree.classList.remove('drop-root');
+  };
+  /** Where a drop at this point would go: { parent, ref, where, row, cls } or null. */
+  const dropAt = (e) => {
+    if (!drag) return null;
+    const row = e.target.closest('.tree-row');
+    if (!row) return { parent: null, ref: null, where: 'end', row: null, cls: 'root' };
+    const r = row.getBoundingClientRect();
+    const y = (e.clientY - r.top) / r.height;
+    const over = { kind: row.dataset.kind, id: row.dataset.id };
+    let res;
+    if (drag.kind === 'note') {
+      if (over.kind === 'note') {
+        res = { parent: S.notes.get(over.id)?.folderId || null, ref: over.id, where: y < 0.5 ? 'before' : 'after' };
+      } else {
+        res = { parent: over.id, ref: null, where: 'end', into: true };
+      }
+    } else if (over.kind === 'folder') {
+      const zone = y < 0.28 ? 'before' : y > 0.72 ? 'after' : 'into';
+      res = zone === 'into'
+        ? { parent: over.id, ref: null, where: 'end', into: true }
+        : { parent: S.folders.get(over.id)?.parentId || null, ref: over.id, where: zone };
+    } else {
+      const parent = S.notes.get(over.id)?.folderId || null;
+      res = { parent, ref: null, where: 'end', into: true, markId: parent };
+    }
+    if (res.ref === drag.id) return null; // onto itself
+    if (drag.kind === 'folder' && res.parent && (res.parent === drag.id || isFolderWithin(res.parent, drag.id))) return null;
+    const mark = res.into ? (res.markId !== undefined ? (res.markId ? $(`.tree-row.folder[data-id="${res.markId}"]`, tree) : null) : row) : row;
+    return { ...res, row: mark, cls: res.into ? (mark ? 'drop-target' : 'root') : `drop-${res.where}` };
   };
   tree.addEventListener('dragstart', (e) => {
     const row = e.target.closest?.('.tree-row');
@@ -1289,24 +1400,18 @@ function setupTree() {
   tree.addEventListener('dragover', (e) => {
     if (drag && !e.dataTransfer.types.includes(DT)) drag = null; // stale state from a cancelled drag
     if (!drag) return;
-    const row = e.target.closest('.tree-row');
-    // Dropping on a note means "into that note's folder"; empty space means top level.
-    let target = null;
-    let mark = null;
-    if (row?.dataset.kind === 'folder') { target = row.dataset.id; mark = row; }
-    else if (row?.dataset.kind === 'note') {
-      target = S.notes.get(row.dataset.id)?.folderId || null;
-      mark = target ? $(`.tree-row.folder[data-id="${target}"]`, tree) : null;
-    }
+    const d = dropAt(e);
     clearMarks();
-    if (!canDrop(target)) { e.dataTransfer.dropEffect = 'none'; return; }
+    if (!d) { e.dataTransfer.dropEffect = 'none'; return; }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (mark) mark.classList.add('drop-target');
-    else tree.classList.add('drop-root');
-    if (row?.dataset.kind === 'folder' && !S.expanded.has(target)) {
-      if (hoverTimer?.id !== target) {
+    if (d.cls === 'root') tree.classList.add('drop-root');
+    else d.row?.classList.add(d.cls);
+    // Hovering the middle of a closed folder opens it.
+    if (d.cls === 'drop-target' && d.row?.dataset.kind === 'folder' && !S.expanded.has(d.parent)) {
+      if (hoverTimer?.id !== d.parent) {
         clearTimeout(hoverTimer?.t);
+        const target = d.parent;
         hoverTimer = { id: target, t: setTimeout(() => { toggleFolder(target, true); renderTree(); }, 700) };
       }
     } else if (hoverTimer) { clearTimeout(hoverTimer.t); hoverTimer = null; }
@@ -1315,14 +1420,11 @@ function setupTree() {
   tree.addEventListener('drop', (e) => {
     if (!drag) return;
     e.preventDefault();
-    const row = e.target.closest('.tree-row');
-    let target = null;
-    if (row?.dataset.kind === 'folder') target = row.dataset.id;
-    else if (row?.dataset.kind === 'note') target = S.notes.get(row.dataset.id)?.folderId || null;
-    const d = drag;
+    const d = dropAt(e);
+    const it = drag;
     drag = null;
     clearMarks();
-    if (d.kind === 'folder') moveFolder(d.id, target); else moveNote(d.id, target);
+    if (d) placeItem(it.kind, it.id, d.parent, d.ref, d.where);
   });
   tree.addEventListener('dragend', () => {
     drag = null;
@@ -1332,17 +1434,17 @@ function setupTree() {
     $$('.dragging', tree).forEach((el) => el.classList.remove('dragging'));
   });
 
-  // The "Notes" heading is also a drop target for "move to top level".
+  // The "Notes" heading is also a drop target: end of the top level.
   const rootBtn = $('#tree-root');
-  rootBtn.addEventListener('dragover', (e) => { if (drag && !e.dataTransfer.types.includes(DT)) drag = null; if (canDrop(null)) { e.preventDefault(); rootBtn.classList.add('selected'); } });
+  rootBtn.addEventListener('dragover', (e) => { if (drag && !e.dataTransfer.types.includes(DT)) drag = null; if (drag) { e.preventDefault(); rootBtn.classList.add('selected'); } });
   rootBtn.addEventListener('dragleave', () => rootBtn.classList.toggle('selected', !S.selectedFolderId));
   rootBtn.addEventListener('drop', (e) => {
     if (!drag) return;
     e.preventDefault();
-    const d = drag;
+    const it = drag;
     drag = null;
     rootBtn.classList.toggle('selected', !S.selectedFolderId);
-    if (d.kind === 'folder') moveFolder(d.id, null); else moveNote(d.id, null);
+    placeItem(it.kind, it.id, null);
   });
 }
 
@@ -1365,6 +1467,24 @@ function collectTasks() {
   }
   const count = (g) => g.standalone.length + g.notes.reduce((a, x) => a + x.tasks.length, 0);
   return { open, done, openCount: count(open), doneCount: count(done) };
+}
+
+/** Short "added" label: "today", "yesterday", "Nov 20", or "Nov 20, 2025" for another year. */
+function addedLabel(ms) {
+  const iso = todayISO(new Date(ms));
+  const n = daysFromToday(iso);
+  if (n === 0) return 'today';
+  if (n === -1) return 'yesterday';
+  const label = formatDate(iso).replace(/^\w{3}, /, '');
+  return iso.slice(0, 4) === todayISO().slice(0, 4) ? label.replace(/, \d{4}$/, '') : label;
+}
+const fullStamp = (ms) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+/** The ghosted "Added …" label for a task (with exact added/edited times on hover); '' if unknown. */
+function addedHtml(created, edited) {
+  if (!created) return '';
+  let tip = `Added ${fullStamp(created)}`;
+  if (edited && edited - created > 60_000) tip += `\nLast changed ${fullStamp(edited)}`;
+  return `<span class="tp-added" title="${esc(tip)}">Added ${esc(addedLabel(created))}</span>`;
 }
 
 /** "Today", "Tomorrow", "Yesterday", or "Fri, Nov 20" (year shown only when it isn't this year). */
@@ -1416,7 +1536,7 @@ function tpRow(t, { kind, note, from = false }) {
   return `<li class="tp-task${t.done ? ' done' : ''}" ${attrs}>
     <button class="check" role="checkbox" aria-checked="${t.done}" data-act="toggle" title="${t.done ? 'Mark as not done' : 'Mark as done'}">${I.check}</button>
     <div class="tp-main">
-      <div class="tp-title" contenteditable="plaintext-only" spellcheck="true" role="textbox" aria-label="Task" data-plain="${esc(t.text)}">${titleHtml}</div>
+      <div class="tp-line"><div class="tp-title" contenteditable="plaintext-only" spellcheck="true" role="textbox" aria-label="Task" data-plain="${esc(t.text)}">${titleHtml}</div>${kind === 's' ? addedHtml(t.createdAt, t.updatedAt) : addedHtml(t.created, t.edited)}</div>
       ${from ? `<div class="tp-from">${kind === 'n' ? `in <button type="button" data-act="open-note" data-note="${note.id}">${esc(noteTitle(note))}</button>` : 'Standalone task'}</div>` : ''}
       ${details}
       <div class="tp-meta">${due}</div>
@@ -2219,7 +2339,8 @@ function updateNoteFoot() {
   const ts = info.tasks.filter((t) => t.text);
   const open = ts.filter((t) => !t.done).length;
   const words = (info.text.match(/\S+/g) || []).length;
-  foot.innerHTML = `<span>${plural(words, 'word')}</span>${ts.length ? `<span class="foot-tasks">${open} open · ${ts.length - open} done</span>` : ''}<span class="spacer"></span><span class="foot-tips"><kbd>[ ]</kbd> to-do · <kbd>@date</kbd> date · <kbd>@</kbd> more</span><span>Edited ${timeAgo(n.updatedAt)}</span>`;
+  foot.innerHTML = `<span>${plural(words, 'word')}</span>${ts.length ? `<span class="foot-tasks">${open} open · ${ts.length - open} done</span>` : ''}<span class="spacer"></span><span class="foot-tips"><kbd>[ ]</kbd> to-do · <kbd>@date</kbd> date · <kbd>@</kbd> more</span><span title="Created ${esc(fullStamp(n.createdAt))}
+Last edited ${esc(fullStamp(n.updatedAt))}">Created ${esc(addedLabel(n.createdAt))} · Edited ${timeAgo(n.updatedAt)}</span>`;
 }
 const updateFootSoon = debounce(updateNoteFoot, 300);
 
@@ -2614,7 +2735,6 @@ let exporting = false;
 async function runExport(kind) {
   if (exporting) { toast('An export is already running…'); return; }
   exporting = true;
-  $('#download').disabled = true;
   const label = EXPORTS.find((x) => x.id === kind).title;
   const t = progressToast(`Preparing ${label}…`);
   try {
@@ -2639,7 +2759,6 @@ async function runExport(kind) {
     t.fail(`Download failed: ${err.message}`);
   } finally {
     exporting = false;
-    $('#download').disabled = false;
   }
 }
 
@@ -2962,23 +3081,26 @@ function setupChrome() {
   $('.search-icon').innerHTML = I.search;
   $('#new-folder').innerHTML = I.folderPlus;
   $('#new-note').innerHTML = I.notePlus;
-  $('#wipe').innerHTML = `${I.trash}<span>Wipe database</span>`;
-  $('#download').innerHTML = `${I.download}<span>Download</span>`;
-  $('#lock-now').innerHTML = I.lock;
   $('#sidebar-close').innerHTML = I.x;
-  $('#lock-now').addEventListener('click', () => lock.now());
 
   $('#settings-btn').innerHTML = I.settings;
-  $('#settings-btn').addEventListener('click', () => settingsDialog());
+  $('#settings-btn').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    showMenu({ x: r.left, y: r.top - 4 }, [
+      { label: 'Settings…', icon: I.settings, run: () => settingsDialog() },
+      { label: 'Download a copy…', icon: I.download, run: () => downloadDialog() },
+      { label: 'Lock now', icon: I.lock, run: () => lock.now() },
+      'sep',
+      { label: 'Wipe database…', icon: I.trash, danger: true, run: () => wipeDialog() },
+    ]);
+  });
   refreshShortcutHints();
   $('#nav-scratch .nav-icon').innerHTML = I.sticky;
   $('#nav-scratch').addEventListener('click', () => openScratchpad());
   $('#new-note').addEventListener('click', () => createNote());
   $('#new-folder').addEventListener('click', () => newFolderAction());
   $('#tree-root').addEventListener('click', () => { S.selectedFolderId = null; renderTree(); });
-  $('#wipe').addEventListener('click', wipeDialog);
   $('#save-status').addEventListener('click', () => sync.retryNow());
-  $('#download').addEventListener('click', downloadDialog);
   $('#sidebar-close').addEventListener('click', closeSidebar);
   $('#scrim').addEventListener('click', closeSidebar);
 
@@ -3043,6 +3165,20 @@ function setupChrome() {
   setInterval(() => { updateNoteFoot(); }, 30000);
 }
 
+/** To-dos saved before creation dates were recorded are marked "unknown" once, so only new ones get today's date. */
+function markOldTasksUndated() {
+  for (const n of S.notes.values()) {
+    if (!n.content.includes('"taskItem"')) continue;
+    const doc = parseDoc(n.content);
+    if (!doc) continue;
+    const { doc: marked, count } = markUndatedTasks(doc);
+    if (!count) continue;
+    n.content = JSON.stringify(marked);
+    sync.dirtyNotes.add(n.id);
+  }
+  flushNotes();
+}
+
 /** Notes written with the old markdown editor are converted to rich text once, and saved. */
 function migrateLegacyNotes() {
   let count = 0;
@@ -3079,6 +3215,7 @@ async function boot() {
     }
   }
   migrateLegacyNotes();
+  markOldTasksUndated();
   recoverUnsavedEdits();
   health.start();
   if (!location.hash || location.hash === '#') {

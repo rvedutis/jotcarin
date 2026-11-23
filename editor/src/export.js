@@ -31,6 +31,9 @@ const SCRATCHPAD_ID = 'scratchpad'; // the permanent quick-capture note (listed 
  * data: { folders, notes, tasks, legacyToDoc } → ordered sections:
  * [{ path: ['Work','Meetings'] | [], notes: [{ note, doc }] }]
  */
+/** Same order as the sidebar: arranged items first (by position), then the rest by name. */
+const byOrder = (a, b, name) => ((a.position ?? Infinity) - (b.position ?? Infinity)) || collator.compare(name(a), name(b));
+
 function buildModel({ folders, notes, tasks, legacyToDoc }) {
   const kids = new Map();
   const notesBy = new Map();
@@ -52,9 +55,9 @@ function buildModel({ folders, notes, tasks, legacyToDoc }) {
   const sections = [];
   const walk = (pid, path) => {
     const ns = (notesBy.get(pid) || []).sort((a, b) =>
-      (b.note.id === SCRATCHPAD_ID) - (a.note.id === SCRATCHPAD_ID) || collator.compare(noteTitle(a.note), noteTitle(b.note)));
+      (b.note.id === SCRATCHPAD_ID) - (a.note.id === SCRATCHPAD_ID) || byOrder(a.note, b.note, noteTitle));
     if (ns.length) sections.push({ path, notes: ns });
-    for (const f of (kids.get(pid) || []).sort((a, b) => collator.compare(a.name, b.name))) walk(f.id, [...path, f.name]);
+    for (const f of (kids.get(pid) || []).sort((a, b) => byOrder(a, b, (x) => x.name))) walk(f.id, [...path, f.name]);
   };
   walk(null, []);
 
