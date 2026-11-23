@@ -1,8 +1,8 @@
 'use strict';
 /**
- * Jotcairn desktop app (Electron).
+ * Taskule desktop app (Electron).
  *
- * Opens the Jotcairn web app in its own window. If an Jotcairn server is already
+ * Opens the Taskule web app in its own window. If an Taskule server is already
  * running on the port (for example the one started at Windows login), the window uses
  * it; otherwise the app starts its own server and stops it again when you quit.
  * The password lock lives in the server, so it applies here and in a browser alike.
@@ -19,19 +19,19 @@ const ICON = path.join(__dirname, 'icon.png');
 const TRAY_ICON = path.join(__dirname, 'icon.ico');
 // Must match the ID written into the Start menu / Desktop / taskbar shortcuts (electron/shortcuts.js),
 // or Windows shows the running window as a separate taskbar button from a pinned shortcut.
-const APP_ID = 'local.jotcairn.app';
+const APP_ID = 'local.taskule.app';
 
-app.setName('Jotcairn');
+app.setName('Taskule');
 app.setAppUserModelId(APP_ID);
 
-// The app used to be called Actionbase. On first launch after the rename, carry its profile
-// over (window size, spelling dictionary, and the unsaved-edits journal in browser storage).
-// The old folder is left in place.
+// The app used to be called Jotcairn, and before that Actionbase. On first launch after a
+// rename, carry the newest old profile over (window size, spelling dictionary, settings, and
+// the unsaved-edits journal in browser storage). The old folders are left in place.
 try {
   const newDir = app.getPath('userData');
-  const oldDir = path.join(app.getPath('appData'), 'Actionbase');
-  if (!fs.existsSync(newDir) && fs.existsSync(oldDir)) fs.cpSync(oldDir, newDir, { recursive: true });
-} catch (err) { console.error('Jotcairn: could not copy the old Actionbase profile:', err.message); }
+  const oldDir = ['Jotcairn', 'Actionbase'].map((n) => path.join(app.getPath('appData'), n)).find((d) => fs.existsSync(d));
+  if (!fs.existsSync(newDir) && oldDir) fs.cpSync(oldDir, newDir, { recursive: true });
+} catch (err) { console.error('Taskule: could not copy the old app profile:', err.message); }
 
 /** Where your notes live. The packaged app is told the project's data folder at build time. */
 function dataDir() {
@@ -48,7 +48,7 @@ let server = null; // the server this app started (null when using one that was 
 let quitting = false;
 let serverRestarts = 0;
 
-/** 'jotcairn' if Jotcairn answers on the port, 'other' if something else does, 'none' if nothing. */
+/** 'taskule' if Taskule answers on the port, 'other' if something else does, 'none' if nothing. */
 function probe() {
   return new Promise((resolve) => {
     const req = http.get({ host: '127.0.0.1', port: PORT, path: '/api/session', headers: { Host: `localhost:${PORT}` }, timeout: 1500 }, (res) => {
@@ -56,7 +56,7 @@ function probe() {
       res.setEncoding('utf8');
       res.on('data', (c) => { body += c; });
       res.on('end', () => {
-        try { resolve('unlocked' in JSON.parse(body) ? 'jotcairn' : 'other'); } catch { resolve('other'); }
+        try { resolve('unlocked' in JSON.parse(body) ? 'taskule' : 'other'); } catch { resolve('other'); }
       });
     });
     req.on('error', () => resolve('none'));
@@ -68,9 +68,9 @@ function startServer() {
   const dir = dataDir();
   fs.mkdirSync(dir, { recursive: true });
   const log = fs.createWriteStream(path.join(dir, 'server.log'), { flags: 'a' });
-  log.write(`\n--- ${new Date().toISOString()} started by the Jotcairn app\n`);
+  log.write(`\n--- ${new Date().toISOString()} started by the Taskule app\n`);
   server = utilityProcess.fork(path.join(ROOT, 'server.js'), [], {
-    serviceName: 'Jotcairn server',
+    serviceName: 'Taskule server',
     stdio: 'pipe',
     env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, NODE_NO_WARNINGS: '1' },
   });
@@ -86,7 +86,7 @@ function startServer() {
 }
 
 /**
- * Watchdog: every few seconds make sure an Jotcairn server is answering. If none is (the
+ * Watchdog: every few seconds make sure an Taskule server is answering. If none is (the
  * background one was stopped or crashed), start our own — the window shows "editing paused"
  * until it's back, and picks up where it left off.
  */
@@ -100,22 +100,22 @@ function watchServer() {
       serverRestarts = 0;
       await ensureServer();
     } catch (err) {
-      console.error('Jotcairn: could not restart the server:', err.message);
+      console.error('Taskule: could not restart the server:', err.message);
     } finally { healing = false; }
   }, 5000).unref?.();
 }
 
 async function ensureServer() {
   let state = await probe();
-  if (state === 'jotcairn') return;
-  if (state === 'other') throw new Error(`Port ${PORT} is being used by another program, so Jotcairn can't start.`);
+  if (state === 'taskule') return;
+  if (state === 'other') throw new Error(`Port ${PORT} is being used by another program, so Taskule can't start.`);
   startServer();
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 250));
     state = await probe();
-    if (state === 'jotcairn') return;
+    if (state === 'taskule') return;
   }
-  throw new Error(`The Jotcairn server didn't start. Details are in ${path.join(dataDir(), 'server.log')}.`);
+  throw new Error(`The Taskule server didn't start. Details are in ${path.join(dataDir(), 'server.log')}.`);
 }
 
 // ---------------------------------------------------------------- window state
@@ -186,7 +186,7 @@ function createWindow() {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    title: 'Jotcairn',
+    title: 'Taskule',
     icon: ICON,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#13151c' : '#f5f6fb', // matches the theme until the page draws
     autoHideMenuBar: false,
@@ -234,9 +234,9 @@ function createWindow() {
       buttons: ['Leave anyway', 'Stay'],
       defaultId: 1,
       cancelId: 1,
-      title: 'Jotcairn',
+      title: 'Taskule',
       message: 'Some changes are still saving.',
-      detail: 'Unsaved note edits are kept and will be saved the next time Jotcairn opens.',
+      detail: 'Unsaved note edits are kept and will be saved the next time Taskule opens.',
     });
     if (choice === 0) e.preventDefault();
   });
@@ -247,7 +247,7 @@ function createWindow() {
     saveBounds(win);
     if (quitting) return;
     e.preventDefault();
-    wc.executeJavaScript('window.__jotcairnFlush && window.__jotcairnFlush()').catch(() => {});
+    wc.executeJavaScript('window.__taskuleFlush && window.__taskuleFlush()').catch(() => {});
     win.hide();
     trayHint();
   });
@@ -259,8 +259,8 @@ function createWindow() {
   wc.on('render-process-gone', (_e, details) => {
     if (details.reason === 'clean-exit' || quitting) return;
     const choice = dialog.showMessageBoxSync(win, {
-      type: 'error', buttons: ['Reload', 'Quit'], defaultId: 0, title: 'Jotcairn',
-      message: 'Jotcairn stopped unexpectedly.', detail: 'Reloading is safe — unsaved note edits are kept.',
+      type: 'error', buttons: ['Reload', 'Quit'], defaultId: 0, title: 'Taskule',
+      message: 'Taskule stopped unexpectedly.', detail: 'Reloading is safe — unsaved note edits are kept.',
     });
     if (choice === 0) wc.reload(); else app.quit();
   });
@@ -280,7 +280,7 @@ function showWindow() {
 
 function lockApp() {
   if (!win) return;
-  win.webContents.executeJavaScript('window.__jotcairnLock && window.__jotcairnLock()').catch(() => {});
+  win.webContents.executeJavaScript('window.__taskuleLock && window.__taskuleLock()').catch(() => {});
   showWindow();
 }
 
@@ -293,7 +293,7 @@ async function quitApp() {
     let saved = true;
     try {
       saved = await Promise.race([
-        win.webContents.executeJavaScript('window.__jotcairnFlush ? window.__jotcairnFlush(4000) : true'),
+        win.webContents.executeJavaScript('window.__taskuleFlush ? window.__taskuleFlush(4000) : true'),
         new Promise((r) => setTimeout(() => r(false), 6000)),
       ]);
     } catch { saved = true; /* page not loaded: nothing to save */ }
@@ -304,9 +304,9 @@ async function quitApp() {
         buttons: ['Quit anyway', 'Keep running'],
         defaultId: 1,
         cancelId: 1,
-        title: 'Jotcairn',
+        title: 'Taskule',
         message: 'Some changes haven’t saved yet.',
-        detail: 'Jotcairn can’t reach its server right now. Unsaved note edits are kept and will be saved the next time it opens; other recent changes may be lost.',
+        detail: 'Taskule can’t reach its server right now. Unsaved note edits are kept and will be saved the next time it opens; other recent changes may be lost.',
       });
       if (choice === 1) { quitInProgress = false; return; }
     }
@@ -317,12 +317,12 @@ async function quitApp() {
 
 function createTray() {
   tray = new Tray(TRAY_ICON);
-  tray.setToolTip('Jotcairn');
+  tray.setToolTip('Taskule');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Jotcairn', click: showWindow },
+    { label: 'Open Taskule', click: showWindow },
     { label: 'Lock', click: lockApp },
     { type: 'separator' },
-    { label: 'Quit Jotcairn', click: () => { quitApp(); } },
+    { label: 'Quit Taskule', click: () => { quitApp(); } },
   ]));
   tray.on('click', showWindow);
 }
@@ -335,19 +335,19 @@ function trayHint() {
   tray.displayBalloon({
     iconType: 'custom',
     icon: ICON,
-    title: 'Jotcairn is still running',
+    title: 'Taskule is still running',
     content: 'It’s in the system tray. Click the icon to open it, or right-click it to quit.',
   });
 }
 
 // For automated tests over --inspect (main process only; web pages can't reach this).
-global.__jotcairn = { showWindow, lockApp, quitApp, get tray() { return tray; }, get win() { return win; } };
+global.__taskule = { showWindow, lockApp, quitApp, get tray() { return tray; }, get win() { return win; } };
 
 // ---------------------------------------------------------------- app lifecycle
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  // Opening Jotcairn again (shortcut, taskbar, Start menu) brings back the running window.
+  // Opening Taskule again (shortcut, taskbar, Start menu) brings back the running window.
   app.on('second-instance', () => showWindow());
 
   app.whenReady().then(async () => {
@@ -355,7 +355,7 @@ if (!app.requestSingleInstanceLock()) {
 
     const ses = session.defaultSession;
     // Every time the app opens, it starts locked.
-    await ses.cookies.remove(ORIGIN, 'jc_session').catch(() => {});
+    await ses.cookies.remove(ORIGIN, 'tk_session').catch(() => {});
     // The app needs no camera, microphone, location, notifications, etc.
     ses.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'clipboard-sanitized-write'));
     ses.setSpellCheckerLanguages(['en-US']);
@@ -367,7 +367,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       await ensureServer();
     } catch (err) {
-      dialog.showErrorBox('Jotcairn couldn’t start', err.message);
+      dialog.showErrorBox('Taskule couldn’t start', err.message);
       app.quit();
       return;
     }

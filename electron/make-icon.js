@@ -1,5 +1,5 @@
 'use strict';
-// Renders the Jotcairn icon (blue→purple tile with a check mark) to icon.png and icon.ico.
+// Renders the Taskule icon (blue→purple tile with a check mark) to icon.png and icon.ico.
 //   npx electron electron/make-icon.js
 const { app, BrowserWindow, nativeImage } = require('electron');
 const fs = require('node:fs');

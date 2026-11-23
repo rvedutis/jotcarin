@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Jotcairn — local notes + to-dos server.
+ * Taskule — local notes + to-dos server.
  * Zero dependencies: Node's built-in http + node:sqlite (Node >= 22.13).
  */
 const http = require('node:http');
@@ -25,7 +25,7 @@ const IMAGES_DIR = path.join(DATA_DIR, 'images');
 // (change it with `npm run set-password`). Unlocking sets a session cookie, so you're
 // asked again each time you reopen the app or browser.
 const PASSWORD_FILE = path.join(DATA_DIR, 'password.json');
-const SESSION_COOKIE = 'jc_session';
+const SESSION_COOKIE = 'tk_session';
 const SESSION_MAX_AGE = 30 * 24 * 3600 * 1000; // a session is also refused after 30 days
 
 /** The stored password hash; null if none has been set yet. Throws if the file is unreadable. */
@@ -84,7 +84,7 @@ function newSessionToken() {
   return `${issued}.${signSession(issued)}`;
 }
 function sessionValid(req) {
-  const m = /(?:^|;\s*)jc_session=([^;]+)/.exec(req.headers.cookie || '');
+  const m = /(?:^|;\s*)tk_session=([^;]+)/.exec(req.headers.cookie || '');
   if (!m) return false;
   const [issuedStr, sig] = m[1].split('.');
   const issued = Number(issuedStr);
@@ -102,14 +102,18 @@ function sessionCookie(value, maxAge) {
 
 // ---------------------------------------------------------------- database
 /**
- * The app used to be called Actionbase, with its database in data/actionbase.db. On the first
- * start after the rename, fold any pending writes into that file (WAL checkpoint), close it,
- * and rename it to jotcairn.db. Nothing is copied or rewritten, so nothing can be lost; if any
- * step fails the server stops with a clear message and the old file is left exactly as it was.
+ * The app used to be called Jotcairn (data/jotcairn.db), and before that Actionbase
+ * (data/actionbase.db). On the first start after a rename, fold any pending writes into the
+ * old file (WAL checkpoint), close it, and rename it to taskule.db. Nothing is copied or
+ * rewritten, so nothing can be lost; if any step fails the server stops with a clear message
+ * and the old file is left exactly as it was.
  */
+const OLD_DB_NAMES = ['jotcairn.db', 'actionbase.db']; // newest first
 function migrateOldDatabaseName() {
-  const oldFile = path.join(DATA_DIR, 'actionbase.db');
-  if (fs.existsSync(DB_FILE) || !fs.existsSync(oldFile)) return;
+  if (fs.existsSync(DB_FILE)) return;
+  const oldName = OLD_DB_NAMES.find((n) => fs.existsSync(path.join(DATA_DIR, n)));
+  if (!oldName) return;
+  const oldFile = path.join(DATA_DIR, oldName);
   try {
     const old = new DatabaseSync(oldFile);
     old.exec('PRAGMA wal_checkpoint(TRUNCATE)');
@@ -120,9 +124,9 @@ function migrateOldDatabaseName() {
     }
     if (fs.existsSync(oldFile + '-wal')) throw new Error('its write-ahead log could not be folded in');
     fs.renameSync(oldFile, DB_FILE);
-    console.log(`[${new Date().toISOString()}] Renamed data/actionbase.db to data/jotcairn.db (app renamed to Jotcairn).`);
+    console.log(`[${new Date().toISOString()}] Renamed data/${oldName} to data/taskule.db (app renamed to Taskule).`);
   } catch (err) {
-    console.error(`[${new Date().toISOString()}] Couldn't rename data/actionbase.db to data/jotcairn.db: ${err.message}. Nothing was changed. Close anything using the database and start again.`);
+    console.error(`[${new Date().toISOString()}] Couldn't rename data/${oldName} to data/taskule.db: ${err.message}. Nothing was changed. Close anything using the database and start again.`);
     process.exit(1);
   }
 }
@@ -130,7 +134,7 @@ function migrateOldDatabaseName() {
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(IMAGES_DIR, { recursive: true });
 SESSION_KEY = sessionKey();
-const DB_FILE = path.join(DATA_DIR, 'jotcairn.db');
+const DB_FILE = path.join(DATA_DIR, 'taskule.db');
 migrateOldDatabaseName();
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const db = new DatabaseSync(DB_FILE);
@@ -224,14 +228,14 @@ const stamp = (d = new Date()) => {
 };
 function listBackups() {
   try {
-    return fs.readdirSync(BACKUP_DIR).filter((f) => /^(jotcairn|actionbase)-.*\.db$/.test(f)) // (backups from before the rename count too)
+    return fs.readdirSync(BACKUP_DIR).filter((f) => /^(taskule|jotcairn|actionbase)-.*\.db$/.test(f)) // (backups made under the app's earlier names count too)
       .map((f) => ({ f, t: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs })).sort((a, b) => b.t - a.t);
   } catch { return []; }
 }
 /** Snapshot the database to data/backups and check the copy opens and is intact. Returns its path. */
 function backupNow(reason = 'auto') {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  const file = path.join(BACKUP_DIR, `jotcairn-${stamp()}-${reason}.db`);
+  const file = path.join(BACKUP_DIR, `taskule-${stamp()}-${reason}.db`);
   try {
     db.prepare('VACUUM INTO ?').run(file);
     const copy = new DatabaseSync(file, { readOnly: true });
@@ -553,7 +557,7 @@ async function downloadImage(url) {
     if (addrs.some((a) => isPrivateAddress(a.address))) throw new HttpError(400, 'Images on local network addresses can’t be imported');
     let res;
     try {
-      res = await fetch(u, { redirect: 'manual', signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Jotcairn/1.0 (local notes app)', Accept: 'image/*' } });
+      res = await fetch(u, { redirect: 'manual', signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Taskule/1.0 (local notes app)', Accept: 'image/*' } });
     } catch { throw new HttpError(502, 'Couldn’t download the image'); }
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       current = new URL(res.headers.get('location'), u).href;
@@ -620,7 +624,7 @@ function createBackup() {
   try {
     // A consistent, compacted copy of the live database (safe while the app is running).
     db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
-    const entries = [{ name: 'jotcairn.db', data: fs.readFileSync(tmp) }];
+    const entries = [{ name: 'taskule.db', data: fs.readFileSync(tmp) }];
     for (const f of fs.readdirSync(IMAGES_DIR)) {
       if (IMAGE_FILE_RE.test(f)) entries.push({ name: `images/${f}`, data: fs.readFileSync(path.join(IMAGES_DIR, f)), store: true });
     }
@@ -628,14 +632,14 @@ function createBackup() {
     entries.push({
       name: 'RESTORE.txt',
       data: Buffer.from([
-        `Jotcairn backup — ${new Date().toString()}`,
+        `Taskule backup — ${new Date().toString()}`,
         [[counts.n, 'note'], [counts.f, 'folder'], [counts.t, 'standalone task'], [entries.length - 1, 'image']].map(([k, w]) => `${k} ${w}${k === 1 ? '' : 's'}`).join(', ') + '.',
         '',
         'To restore:',
-        '  1. Stop Jotcairn (Ctrl+C in its terminal).',
-        '  2. In the Jotcairn folder, rename the existing "data" folder (e.g. to "data-old").',
-        '  3. Create a new "data" folder and copy jotcairn.db and the images folder from this zip into it.',
-        '  4. Start Jotcairn again (npm start).',
+        '  1. Stop Taskule (Ctrl+C in its terminal).',
+        '  2. In the Taskule folder, rename the existing "data" folder (e.g. to "data-old").',
+        '  3. Create a new "data" folder and copy taskule.db and the images folder from this zip into it.',
+        '  4. Start Taskule again (npm start).',
         '',
       ].join('\r\n')),
     });
@@ -769,7 +773,7 @@ async function handleApi(req, res, pathname) {
     const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     return send(res, 200, zip, {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="jotcairn-backup-${stamp}.zip"`,
+      'Content-Disposition': `attachment; filename="taskule-backup-${stamp}.zip"`,
       'Content-Length': zip.length,
     });
   }
@@ -842,7 +846,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n  [${new Date().toISOString()}] Jotcairn is running →  http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}\n  Data: ${DB_FILE}\n  Database check: ${dbHealth.ok ? 'ok' : dbHealth.problem}\n`);
+  console.log(`\n  [${new Date().toISOString()}] Taskule is running →  http://${HOST === '127.0.0.1' ? 'localhost' : HOST}:${PORT}\n  Data: ${DB_FILE}\n  Database check: ${dbHealth.ok ? 'ok' : dbHealth.problem}\n`);
 });
 server.on('error', (err) => {
   // Exit code 3 = "another server already has the port" (the Windows launcher waits longer then).

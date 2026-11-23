@@ -1,6 +1,6 @@
 data/
 node_modules/
-scripts/jotcairn-server.cmd
+scripts/taskule-server.cmd
 dist/
 electron/config.json
-scripts/jotcairn-server.vbs
+scripts/taskule-server.vbs

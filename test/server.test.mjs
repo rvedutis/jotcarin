@@ -56,7 +56,7 @@ function client(port) {
 }
 const doc = (text) => JSON.stringify({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jotcairn-test-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'taskule-test-'));
 const port = 4900 + Math.floor(Math.random() * 90);
 let srv;
 try {
@@ -170,7 +170,7 @@ try {
 
   // ---------------------------------------------------------------- damaged database
   await srv.stop();
-  const dbFile = path.join(tmp, 'jotcairn.db');
+  const dbFile = path.join(tmp, 'taskule.db');
   { const d = new DatabaseSync(dbFile); d.exec('PRAGMA wal_checkpoint(TRUNCATE)'); d.close(); }
   const buf = fs.readFileSync(dbFile);
   const pageSize = buf.readUInt16BE(16) || 4096;
@@ -196,30 +196,30 @@ try {
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* temp */ }
 }
 
-// ---------------------------------------------------------------- rename: data/actionbase.db → data/jotcairn.db
-{
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jotcairn-migrate-'));
+// ---------------------------------------------------------------- rename: data/jotcairn.db or data/actionbase.db → data/taskule.db
+for (const [oldName, offset] of [['jotcairn.db', 1], ['actionbase.db', 2]]) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'taskule-migrate-'));
   let m;
   try {
     // An old-style database, left with recent writes still in its WAL file (as after a hard stop).
-    const old = new DatabaseSync(path.join(dir, 'actionbase.db'));
+    const old = new DatabaseSync(path.join(dir, oldName));
     old.exec(`PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;
       CREATE TABLE notes (id TEXT PRIMARY KEY, folder_id TEXT, title TEXT NOT NULL DEFAULT '', content TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
       CREATE TABLE tasks (id TEXT PRIMARY KEY, text TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, completed_at INTEGER, updated_at INTEGER NOT NULL);
       CREATE TABLE folders (id TEXT PRIMARY KEY, parent_id TEXT, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);`);
     old.prepare('INSERT INTO notes VALUES (?, NULL, ?, ?, 1, 1)').run('old1', 'From Actionbase', doc('kept'));
     old.prepare('INSERT INTO tasks VALUES (?, ?, 0, 1, NULL, 1)').run('ot1', 'Old task');
-    check('old database has unflushed writes in its WAL', fs.existsSync(path.join(dir, 'actionbase.db-wal')) && fs.statSync(path.join(dir, 'actionbase.db-wal')).size > 0);
+    check('old database has unflushed writes in its WAL', fs.existsSync(path.join(dir, oldName + '-wal')) && fs.statSync(path.join(dir, oldName + '-wal')).size > 0);
     // leave it open-and-abandoned like a crashed process would (closing would checkpoint)
     fs.writeFileSync(path.join(dir, 'password.json'), JSON.stringify({ salt: 'x', hash: '0'.repeat(64) }));
     old.close();
-    m = await startServer(dir, port + 1);
-    check('database renamed to jotcairn.db', fs.existsSync(path.join(dir, 'jotcairn.db')) && !fs.existsSync(path.join(dir, 'actionbase.db')), fs.readdirSync(dir));
-    const now = new DatabaseSync(path.join(dir, 'jotcairn.db'), { readOnly: true });
+    m = await startServer(dir, port + offset);
+    check(`${oldName} renamed to taskule.db`, fs.existsSync(path.join(dir, 'taskule.db')) && !fs.existsSync(path.join(dir, oldName)), fs.readdirSync(dir));
+    const now = new DatabaseSync(path.join(dir, 'taskule.db'), { readOnly: true });
     check('old notes and tasks carried over', now.prepare("SELECT title FROM notes WHERE id = 'old1'").get()?.title === 'From Actionbase' && now.prepare("SELECT text FROM tasks WHERE id = 'ot1'").get()?.text === 'Old task');
     check('old database upgraded (task details/due, note versions)', ['body', 'due'].every((c) => now.prepare('PRAGMA table_info(tasks)').all().some((x) => x.name === c)) && now.prepare('PRAGMA table_info(notes)').all().some((x) => x.name === 'version'));
     now.close();
-    const h = await (await fetch(`http://localhost:${port + 1}/api/health`)).json();
+    const h = await (await fetch(`http://localhost:${port + offset}/api/health`)).json();
     check('healthy after the rename', h.ok === true, h);
   } finally {
     try { await m?.stop(); } catch { /* stopped */ }

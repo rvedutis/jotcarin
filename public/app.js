@@ -17,15 +17,20 @@ function uid() {
 }
 /** Names of things this app keeps in browser storage. */
 const KEYS = {
-  unsaved: 'jc:unsaved', last: 'jc:last', expanded: 'jc:expanded', showCompleted: 'jc:showCompleted',
-  sidebarPinned: 'jc:sidebarPinned', tasksPinned: 'jc:tasksPinned', theme: 'jc:theme', shortcuts: 'jc:shortcuts',
+  unsaved: 'tk:unsaved', last: 'tk:last', expanded: 'tk:expanded', showCompleted: 'tk:showCompleted',
+  sidebarPinned: 'tk:sidebarPinned', tasksPinned: 'tk:tasksPinned', theme: 'tk:theme', shortcuts: 'tk:shortcuts',
 };
-// One-time carry-over from before the rename (the app was called Actionbase and used "ab:" keys), including unsaved edits.
+// One-time carry-over from the app's earlier names — Jotcairn ("jc:" keys) and Actionbase ("ab:") —
+// including the journal of unsaved edits. The newest old value wins; old keys are removed once copied.
 try {
-  for (const [name, key] of Object.entries(KEYS)) {
-    const old = `ab:${key.slice(3)}`;
-    if (localStorage.getItem(key) === null && localStorage.getItem(old) !== null) localStorage.setItem(key, localStorage.getItem(old));
-    if (name && localStorage.getItem(key) !== null) localStorage.removeItem(old);
+  for (const key of Object.values(KEYS)) {
+    for (const prefix of ['jc:', 'ab:']) {
+      const old = prefix + key.slice(3);
+      const v = localStorage.getItem(old);
+      if (v === null) continue;
+      if (localStorage.getItem(key) === null) localStorage.setItem(key, v);
+      localStorage.removeItem(old);
+    }
   }
 } catch { /* storage unavailable */ }
 const store = {
@@ -78,9 +83,9 @@ const lock = {
       let setup = false;
       const setMode = (isSetup, problem) => {
         setup = isSetup;
-        $('.lock-title', form).textContent = setup ? 'Create a password' : 'Jotcairn is locked';
+        $('.lock-title', form).textContent = setup ? 'Create a password' : 'Taskule is locked';
         $('.lock-sub', form).textContent = setup
-          ? 'Choose a password for Jotcairn. You’ll enter it each time you open it.'
+          ? 'Choose a password for Taskule. You’ll enter it each time you open it.'
           : 'Enter your password to open your notes.';
         confirm.hidden = !setup;
         confirm.required = setup;
@@ -135,7 +140,7 @@ const lock = {
           if (res.status === 409) { setMode(!setup); fail(msg || 'Please try again.'); return; } // mode changed underneath us
           fail(res.status === 401 ? 'That password isn’t right. Try again.' : msg || `Couldn’t unlock (error ${res.status}).`);
         } catch {
-          err.textContent = 'Can’t reach the Jotcairn server. Is it running?';
+          err.textContent = 'Can’t reach the Taskule server. Is it running?';
         } finally {
           btn.disabled = false;
           if (btn.textContent.endsWith('…')) btn.textContent = label;
@@ -448,7 +453,7 @@ function resolveConflict(noteId, server) {
 }
 
 /* =====================================================================
-   Health — Jotcairn must never let you type into something that can't
+   Health — Taskule must never let you type into something that can't
    save. The server is checked every few seconds (and right away when a
    save fails). If it can't be reached, saving keeps failing, or the
    database reports a problem, the app is covered and editing is paused
@@ -532,12 +537,12 @@ const health = {
     }
     const electron = /Electron/i.test(navigator.userAgent);
     const copy = {
-      down: ['Can’t reach the Jotcairn server',
-        `Editing is paused so nothing you type gets lost. Unsaved changes are kept on this computer and will be saved as soon as the server is back. ${electron ? 'Jotcairn is trying to restart it.' : 'Make sure it’s running (open the Jotcairn app, or run npm start).'}`],
+      down: ['Can’t reach the Taskule server',
+        `Editing is paused so nothing you type gets lost. Unsaved changes are kept on this computer and will be saved as soon as the server is back. ${electron ? 'Taskule is trying to restart it.' : 'Make sure it’s running (open the Taskule app, or run npm start).'}`],
       failing: ['Changes aren’t saving',
         'The server is running, but saving keeps failing. Editing is paused so nothing gets lost; unsaved changes are kept on this computer and will be saved once this is fixed.'],
       db: ['Your database needs attention',
-        'Jotcairn found a problem with its database file and has stopped saving to protect your notes. Don’t delete anything. Automatic backups are in the data/backups folder — see “Restoring a backup” in the README.'],
+        'Taskule found a problem with its database file and has stopped saving to protect your notes. Don’t delete anything. Automatic backups are in the data/backups folder — see “Restoring a backup” in the README.'],
     }[state];
     $('#outage-title').textContent = copy[0];
     $('#outage-text').textContent = copy[1];
@@ -617,7 +622,7 @@ function updateStatus() {
   if (sync.failures > 0) {
     el.classList.add('error');
     label.textContent = 'Can’t reach the server — retrying…';
-    el.title = 'Your changes are kept in this browser and will save as soon as the Jotcairn server is reachable. Click to retry now.';
+    el.title = 'Your changes are kept in this browser and will save as soon as the Taskule server is reachable. Click to retry now.';
   } else if (sync.pending) {
     el.classList.add('saving');
     label.textContent = 'Saving…';
@@ -1047,7 +1052,7 @@ function setView(v) {
   S.view = v;
   if (v.type === 'note') store.set(KEYS.last, location.hash);
   $('#nav-scratch').classList.toggle('active', v.type === 'note' && isScratch(v.id));
-  document.title = v.type === 'note' ? `${noteTitle(S.notes.get(v.id))} · Jotcairn` : v.type === 'search' ? 'Search · Jotcairn' : 'Jotcairn';
+  document.title = v.type === 'note' ? `${noteTitle(S.notes.get(v.id))} · Taskule` : v.type === 'search' ? 'Search · Taskule' : 'Taskule';
 }
 
 function mobileBar(title) {
@@ -1260,7 +1265,7 @@ function setupTree() {
   // ---- drag & drop
   let drag = null;
   let hoverTimer = null;
-  const DT = 'application/x-jotcairn';
+  const DT = 'application/x-taskule';
   const canDrop = (targetFolderId) => {
     if (!drag) return false;
     if (drag.kind === 'folder') {
@@ -2295,7 +2300,7 @@ function openNote(id, opts = {}) {
     cur.title = title.value;
     cur.updatedAt = Date.now();
     markNoteDirty(id);
-    document.title = `${noteTitle(cur)} · Jotcairn`;
+    document.title = `${noteTitle(cur)} · Taskule`;
     refreshSoon();
   });
   title?.addEventListener('keydown', (e) => {
@@ -2499,7 +2504,7 @@ async function wipeDialog() {
     title: 'Wipe the entire database?',
     icon: I.alert,
     iconClass: 'red',
-    body: `<p>This deletes <strong>everything</strong> from Jotcairn. A safety copy of the database is saved to <code>data/backups</code> first, so it can be restored by hand if you change your mind.</p>
+    body: `<p>This deletes <strong>everything</strong> from Taskule. A safety copy of the database is saved to <code>data/backups</code> first, so it can be restored by hand if you change your mind.</p>
       <div class="wipe-stats"><span>${plural(S.notes.size, 'note')}</span><span>${plural(S.folders.size, 'folder')}</span><span>${plural(taskCount, 'task')}</span></div>
       <p>Type <strong>delete</strong> to confirm.</p>
       <input class="dlg-input danger" id="wipe-input" autocomplete="off" spellcheck="false" placeholder="delete" aria-label="Type delete to confirm">`,
@@ -2571,7 +2576,7 @@ const EXPORTS = [
   { id: 'word', icon: 'note', cls: 'xo-blue', title: 'Word document (.docx)', sub: 'Everything in one formatted document — opens in Word, Google Docs, Pages' },
   { id: 'markdown', icon: 'code', cls: 'xo-purple', title: 'Markdown (.zip)', sub: 'One .md file per note in your folder structure, plus images' },
   { id: 'pdf', icon: 'printer', cls: 'xo-red', title: 'PDF (.pdf)', sub: 'A print-ready copy of everything' },
-  { id: 'backup', icon: 'database', cls: 'xo-green', title: 'Database backup (.zip)', sub: 'Exact copy of your database and images, for restoring Jotcairn' },
+  { id: 'backup', icon: 'database', cls: 'xo-green', title: 'Database backup (.zip)', sub: 'Exact copy of your database and images, for restoring Taskule' },
 ];
 
 async function downloadDialog() {
@@ -2618,7 +2623,7 @@ async function runExport(kind) {
     if (kind === 'backup') {
       const res = await fetch('/api/backup', { cache: 'no-store' });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `HTTP ${res.status}`);
-      const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] || 'jotcairn-backup.zip';
+      const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] || 'taskule-backup.zip';
       saveBlob(await res.blob(), name);
       t.done(`Downloaded ${name}`);
       return;
@@ -2690,7 +2695,7 @@ const SHORTCUTS = [
   { id: 'search', label: 'Search', hint: '/ also works when you’re not typing', def: 'Ctrl+Shift+F' },
   { id: 'moveOut', label: 'Move lines to a note', hint: 'in the Scratchpad', def: 'Ctrl+Shift+M' },
   { id: 'settings', label: 'Settings', def: 'Ctrl+,' },
-  { id: 'lock', label: 'Lock Jotcairn', def: '' },
+  { id: 'lock', label: 'Lock Taskule', def: '' },
 ];
 // Keys the editor, the browser or the desktop app already use — not available for app shortcuts.
 const RESERVED = new Set([
@@ -2768,7 +2773,7 @@ function refreshShortcutHints() {
   set('#sb-handle', `Show the sidebar — click to keep it open${shortcuts.hint('sidebar')}`);
   set('#tp-handle', `Tasks — click to keep the panel open${shortcuts.hint('toggleTasks')}`);
   set('#settings-btn', `Settings${shortcuts.hint('settings')}`);
-  set('#lock-now', `Lock Jotcairn (asks for the password again)${shortcuts.hint('lock')}`);
+  set('#lock-now', `Lock Taskule (asks for the password again)${shortcuts.hint('lock')}`);
   set('#move-out', `Move the selected lines (or the current line) into another note${shortcuts.hint('moveOut')}`);
   if (typeof sidebar !== 'undefined' && $('#sidebar-pin')) sidebar.apply();
   if (typeof tasksPanel !== 'undefined' && $('#tp-pin')) tasksPanel.apply();
@@ -3008,12 +3013,12 @@ function setupChrome() {
   window.addEventListener('hashchange', route);
   window.addEventListener('popstate', route);
   // Used by the desktop app before it closes: save everything, report whether it all made it.
-  window.__jotcairnFlush = async (ms = 4000) => {
+  window.__taskuleFlush = async (ms = 4000) => {
     flushNotes();
     await Promise.race([sync.idle(), sleep(ms)]);
     return !sync.pending;
   };
-  window.__jotcairnLock = () => lock.now(); // desktop app: tray menu → Lock
+  window.__taskuleLock = () => lock.now(); // desktop app: tray menu → Lock
   window.addEventListener('beforeunload', (e) => {
     flushNotes();
     if (sync.pending) { e.preventDefault(); e.returnValue = ''; }

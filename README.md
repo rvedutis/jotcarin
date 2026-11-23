@@ -1,22 +1,22 @@
-# Jotcairn
+# Taskule
 
 Local notes + tasks. Folders, a rich-text editor, inline to-dos, natural-language dates, a Tasks panel with every task in one place, and global search. Everything saves as you type.
 
 ## Desktop app (Windows)
 
-Open **Jotcairn** from the Start menu or the Desktop shortcut. It opens in its own window.
+Open **Taskule** from the Start menu or the Desktop shortcut. It opens in its own window.
 
 - **Password:** the app starts locked every time you open it. The first time, it asks you to create a password. The lock is enforced by the server, so it applies in a browser at http://localhost:4747 too.
 - **Lock now:** the lock icon at the bottom of the sidebar saves everything and locks immediately.
-- **Change the password:** `npm run set-password -- "new password"`. It takes effect immediately and locks anyone currently unlocked. The password is stored hashed (scrypt) in `data/password.json`, which is never committed. Forgot it? Stop Jotcairn, delete that file, and you'll be asked to create a new one.
+- **Change the password:** `npm run set-password -- "new password"`. It takes effect immediately and locks anyone currently unlocked. The password is stored hashed (scrypt) in `data/password.json`, which is never committed. Forgot it? Stop Taskule, delete that file, and you'll be asked to create a new one.
 - **Server:** if the server is already running (for example from auto-start, below), the app uses it. Otherwise the app starts its own and stops it when you quit. Either way it uses the same notes in this folder's `data/`. The app checks every few seconds that a server is answering and starts one if not.
-- **System tray:** the **X** button hides the window to the system tray; Jotcairn keeps running and stays unlocked. Click the tray icon, or open Jotcairn from any shortcut, to bring the window back. Right-click the tray icon for **Open**, **Lock** and **Quit Jotcairn**. Quitting saves everything first and asks if it can't. Minimize works as usual.
-- **Taskbar:** to pin it, open Jotcairn, right-click its taskbar button and choose **Pin to taskbar**. Clicking the pin while it's running switches to the open window, and the shortcuts are set up so Windows treats the pin and the window as one button.
+- **System tray:** the **X** button hides the window to the system tray; Taskule keeps running and stays unlocked. Click the tray icon, or open Taskule from any shortcut, to bring the window back. Right-click the tray icon for **Open**, **Lock** and **Quit Taskule**. Quitting saves everything first and asks if it can't. Minimize works as usual.
+- **Taskbar:** to pin it, open Taskule, right-click its taskbar button and choose **Pin to taskbar**. Clicking the pin while it's running switches to the open window, and the shortcuts are set up so Windows treats the pin and the window as one button.
 - **Desktop extras:** right-click gives Cut/Copy/Paste and spelling suggestions. `Ctrl +`/`Ctrl -`/`Ctrl 0` zoom, `F11` toggles full screen, and links open in your normal browser. Downloads ask where to save, starting in Downloads.
 
 ### Building the app
 
-The app is built into `dist\Jotcairn-win32-x64\Jotcairn.exe` (Electron). After changing any code, quit the app (tray icon → Quit Jotcairn) and rebuild. The rebuild updates that folder in place, so a taskbar pin survives:
+The app is built into `dist\Taskule-win32-x64\Taskule.exe` (Electron). After changing any code, quit the app (tray icon → Quit Taskule) and rebuild. The rebuild updates that folder in place, so a taskbar pin survives:
 
 ```bash
 npm run app:build
@@ -40,7 +40,7 @@ Then open **http://localhost:4747** and enter the password.
 npm run autostart:on
 ```
 
-This adds an **Jotcairn server** shortcut to your Windows **Startup** folder. It runs the server hidden (no window) every time you log in, and starts it right away. If the server ever stops unexpectedly it's started again. Output goes to `data/server.log`. The shortcut runs `wscript.exe` directly, so it works even if `.vbs` files are set to open in an editor.
+This adds an **Taskule server** shortcut to your Windows **Startup** folder. It runs the server hidden (no window) every time you log in, and starts it right away. If the server ever stops unexpectedly it's started again. Output goes to `data/server.log`. The shortcut runs `wscript.exe` directly, so it works even if `.vbs` files are set to open in an editor.
 
 | Command | What it does |
 | --- | --- |
@@ -52,7 +52,7 @@ This adds an **Jotcairn server** shortcut to your Windows **Startup** folder. It
 After changing `server.js`, restart with `npm run stop` then `npm run autostart:on`. (Changes to files in `public/` only need a browser refresh.)
 
 - Different port: `PORT=5000 npm start` (PowerShell: `$env:PORT=5000; npm start`)
-- Data lives in `data/jotcairn.db` (SQLite) and `data/images/`, with automatic backups in `data/backups/` (see [Backups](#backups-and-restoring)). `data/` is never committed.
+- Data lives in `data/taskule.db` (SQLite) and `data/images/`, with automatic backups in `data/backups/` (see [Backups](#backups-and-restoring)). `data/` is never committed.
 - The server only listens on `127.0.0.1`, so nothing on your network can reach it.
 
 ## How it works
@@ -136,19 +136,19 @@ Other ways in:
 | **Word document (.docx)** | One formatted document: a To-dos summary (open and completed, grouped by note, with due dates and details), then every note grouped by folder — headings, lists, checkboxes, tables, images, links, highlights, colours. Opens in Word, Google Docs or Pages. |
 | **Markdown (.zip)** | One `.md` file per note in your folder structure, an `images/` folder, and `To-dos.md`. |
 | **PDF (.pdf)** | A print-ready copy of the same content as the Word export, with page numbers. |
-| **Database backup (.zip)** | An exact snapshot of `jotcairn.db` plus all images and a `RESTORE.txt`. Safe to take while the app is running. |
+| **Database backup (.zip)** | An exact snapshot of `taskule.db` plus all images and a `RESTORE.txt`. Safe to take while the app is running. |
 
 **Wipe database** (bottom-left) deletes everything after you type `delete`. A safety backup is always made first (no backup, no wipe), and image files are kept for 30 days so that backup can be restored with its pictures.
 
 ### Backups and restoring
 
-Jotcairn backs itself up automatically to `data/backups/`: when the server starts (if the newest backup is over 12 hours old), once a day while it runs, and right before any wipe. Each backup is checked after it's written; the newest 20 are kept. The Download dialog shows when the last one ran, and you're alerted if a backup ever fails. **Download → Database backup** gives you a zip you can keep elsewhere.
+Taskule backs itself up automatically to `data/backups/`: when the server starts (if the newest backup is over 12 hours old), once a day while it runs, and right before any wipe. Each backup is checked after it's written; the newest 20 are kept. The Download dialog shows when the last one ran, and you're alerted if a backup ever fails. **Download → Database backup** gives you a zip you can keep elsewhere.
 
 To restore:
-1. Quit the app (tray icon → Quit Jotcairn) and run `npm run stop`.
-2. Rename `data/jotcairn.db` to `jotcairn-damaged.db` (keep it), and delete `jotcairn.db-wal` / `jotcairn.db-shm` if present.
-3. Copy the backup you want (e.g. `data/backups/jotcairn-2026-11-20-090000-auto.db`, or `jotcairn.db` from a downloaded zip) to `data/jotcairn.db`. From a zip, also copy its `images/` into `data/images/`.
-4. Start Jotcairn again.
+1. Quit the app (tray icon → Quit Taskule) and run `npm run stop`.
+2. Rename `data/taskule.db` to `taskule-damaged.db` (keep it), and delete `taskule.db-wal` / `taskule.db-shm` if present.
+3. Copy the backup you want (e.g. `data/backups/taskule-2026-11-20-090000-auto.db`, or `taskule.db` from a downloaded zip) to `data/taskule.db`. From a zip, also copy its `images/` into `data/images/`.
+4. Start Taskule again.
 
 ### Shortcuts
 
@@ -190,13 +190,13 @@ npm install
 npm run build
 ```
 
-`npm test` runs the date-parser tests, the to-do helper tests (details, due dates, editing), and the server tests (task details and due dates, renaming an old Actionbase database, password setup and lock, Scratchpad rules, content validation, version conflicts, backups, wipe safety, damaged database and password file) against throwaway servers. Paste handling lives in `editor/src/paste.js`; `test/fixtures/gdocs-paste.html` is a sample Google Docs clipboard payload for checking it.
+`npm test` runs the date-parser tests, the to-do helper tests (details, due dates, editing), and the server tests (task details and due dates, renaming a database from the app's earlier names, password setup and lock, Scratchpad rules, content validation, version conflicts, backups, wipe safety, damaged database and password file) against throwaway servers. Paste handling lives in `editor/src/paste.js`; `test/fixtures/gdocs-paste.html` is a sample Google Docs clipboard payload for checking it.
 
 ## Reliability and data safety
 
-**You can't work in Jotcairn while it can't save.** The app checks the server every few seconds, and immediately whenever a save fails. If the server can't be reached, saving keeps failing, or the database reports a problem, the window is covered with a message saying what's wrong and editing is paused until it's fixed. When the server comes back, the cover lifts by itself and everything waiting is saved. The desktop app also restarts a missing server on its own.
+**You can't work in Taskule while it can't save.** The app checks the server every few seconds, and immediately whenever a save fails. If the server can't be reached, saving keeps failing, or the database reports a problem, the window is covered with a message saying what's wrong and editing is paused until it's fixed. When the server comes back, the cover lifts by itself and everything waiting is saved. The desktop app also restarts a missing server on its own.
 
-- **Nothing typed is lost.** Every note edit is kept on this computer until the server confirms it's saved. If the app or browser closes while the server is down, those edits are restored (with a notice) the next time you open Jotcairn.
+- **Nothing typed is lost.** Every note edit is kept on this computer until the server confirms it's saved. If the app or browser closes while the server is down, those edits are restored (with a notice) the next time you open Taskule.
 - **Problems are never quiet.** A save the server refuses, a conflict, or a failed backup shows a message that stays until you close it.
 - **Two windows can't overwrite each other.** Each note has a version number. If a note was changed in another window or tab since this one loaded it, the save is refused instead of overwriting. Both texts are kept: the other version stays, and this window's edits are saved as a "(my copy …)" note next to it.
 - **The database is protected.** SQLite runs in WAL mode with `synchronous=FULL`, so a change is on disk before it's reported saved, and it survives a crash or power cut. Every write is a transaction. Note content is checked to be a valid document before it's stored. All writes are idempotent, so retries can't duplicate anything.
@@ -205,7 +205,7 @@ npm run build
 - **Images are never deleted early.** An image file is only removed after no note has used it for 30 days, so undo and restored backups still find their pictures.
 - **The server keeps running.** An unexpected error in one request is logged to `data/server.log` and the server carries on. The auto-start launcher restarts the server if it stops.
 - Note edits are sent ~0.4 s after you stop typing, and immediately on blur, navigation, tab switch or close.
-- **Renamed from Actionbase.** The first time the server starts after the rename, `data/actionbase.db` becomes `data/jotcairn.db`: pending writes are folded in first, and the file is renamed rather than copied. Older `actionbase-*.db` backups still count as backups. The desktop app carries its settings over from the old profile.
+- **Earlier names.** Taskule was called Jotcairn, and before that Actionbase. The first time the server starts after a rename, `data/jotcairn.db` (or `data/actionbase.db`) becomes `data/taskule.db`: pending writes are folded in first, and the file is renamed rather than copied. Older `jotcairn-*.db` and `actionbase-*.db` backups still count as backups. Browser-stored settings and unsaved-edit backups carry over, and the desktop app copies its settings from the old profile.
 - Notes written with the earlier markdown editor are converted to rich text automatically the first time the app loads.
 - The API rejects cross-origin requests, so other websites open in your browser can't touch your data.
 - If the lock appears mid-edit (password changed, or a 30-day-old session), whatever you were saving waits behind the lock screen and is sent once you unlock. Nothing is dropped.

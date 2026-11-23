@@ -1,4 +1,4 @@
-// Stop the Jotcairn server listening on PORT (default 4747) — useful when it runs hidden.
+// Stop the Taskule server listening on PORT (default 4747) — useful when it runs hidden.
 //   npm run stop
 // If it was started by the auto-start launcher (which restarts it if it stops), the launcher
 // is stopped too.
@@ -18,9 +18,9 @@ function pidsOnPort() {
   try { return execSync(`lsof -ti tcp:${PORT} -sTCP:LISTEN`, { encoding: 'utf8' }).split('\n').filter(Boolean).map(Number); } catch { return []; }
 }
 
-/** The auto-start launcher (cmd.exe running jotcairn-server.cmd) that owns this process, if any. */
+/** The auto-start launcher (cmd.exe running taskule-server.cmd) that owns this process, if any. */
 function launcherOf(pid) {
-  const ps = `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}"; if ($p) { $q = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)"; if ($q -and $q.CommandLine -match '(jotcairn|actionbase)-server\\.cmd') { $q.ProcessId } }`;
+  const ps = `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}"; if ($p) { $q = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)"; if ($q -and $q.CommandLine -match '(taskule|jotcairn|actionbase)-server\\.cmd') { $q.ProcessId } }`;
   const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', windowsHide: true });
   const n = Number((r.stdout || '').trim());
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -39,6 +39,6 @@ if (!pids.length) {
     } else {
       process.kill(pid, 'SIGTERM');
     }
-    console.log(`Stopped Jotcairn (process ${pid}) on port ${PORT}.`);
+    console.log(`Stopped Taskule (process ${pid}) on port ${PORT}.`);
   }
 }

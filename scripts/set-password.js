@@ -1,4 +1,4 @@
-// Change the Jotcairn password.
+// Change the Taskule password.
 //   npm run set-password -- "new password"
 // Everyone who is unlocked right now will be asked for the new password.
 // (To start over instead, delete data/password.json: the lock screen then asks you to create one.)

@@ -1,4 +1,4 @@
-// Start the Jotcairn server automatically when you log in to Windows (hidden, no window).
+// Start the Taskule server automatically when you log in to Windows (hidden, no window).
 //   npm run autostart:on      install (also starts it now if it isn't running)
 //   npm run autostart:off     remove
 //   npm run autostart:status  show what's set up
@@ -13,21 +13,22 @@ const { spawnSync } = require('node:child_process');
 
 const PORT = Number(process.env.PORT) || 4747;
 const ROOT = path.resolve(__dirname, '..');
-const LAUNCHER = path.join(__dirname, 'jotcairn-server.cmd');
-const HIDDEN = path.join(__dirname, 'jotcairn-server.vbs');
+const LAUNCHER = path.join(__dirname, 'taskule-server.cmd');
+const HIDDEN = path.join(__dirname, 'taskule-server.vbs');
 
 if (process.platform !== 'win32') {
   console.log('Auto-start setup is for Windows. On macOS/Linux, run "npm start" from a login item or service instead.');
   process.exit(1);
 }
 const STARTUP_DIR = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
-const STARTUP_LINK = path.join(STARTUP_DIR, 'Jotcairn server.lnk');
-// Startup entries left by older versions: the script itself in Startup, and the pre-rename (Actionbase) ones.
-const LEGACY = ['Jotcairn.vbs', 'Actionbase.vbs', 'Actionbase server.lnk'].map((n) => path.join(STARTUP_DIR, n));
-const OLD_FILES = ['actionbase-server.cmd', 'actionbase-server.vbs'].map((n) => path.join(__dirname, n));
+const STARTUP_LINK = path.join(STARTUP_DIR, 'Taskule server.lnk');
+// Startup entries left by older versions: the script itself in Startup, and those from the
+// app's earlier names (Jotcairn, Actionbase).
+const LEGACY = ['Taskule.vbs', 'Jotcairn server.lnk', 'Jotcairn.vbs', 'Actionbase server.lnk', 'Actionbase.vbs'].map((n) => path.join(STARTUP_DIR, n));
+const OLD_FILES = ['jotcairn-server.cmd', 'jotcairn-server.vbs', 'actionbase-server.cmd', 'actionbase-server.vbs'].map((n) => path.join(__dirname, n));
 const WSCRIPT = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe');
 
-/** Is a Jotcairn server answering? (/api/session answers even while locked.) */
+/** Is a Taskule server answering? (/api/session answers even while locked.) */
 function isRunning() {
   return new Promise((resolve) => {
     const req = http.get({ host: '127.0.0.1', port: PORT, path: '/api/session', headers: { Host: `localhost:${PORT}` }, timeout: 1500 }, (res) => {
@@ -54,7 +55,7 @@ function install() {
   // has the port, e.g. the desktop app's own). `npm run stop` stops this loop too.
   fs.writeFileSync(LAUNCHER, [
     '@echo off',
-    'rem Starts the Jotcairn server and keeps it running. Used by the Windows Startup entry (npm run autostart:on).',
+    'rem Starts the Taskule server and keeps it running. Used by the Windows Startup entry (npm run autostart:on).',
     `cd /d "${ROOT}"`,
     'if not exist data mkdir data',
     'set /a quick=0',
@@ -73,7 +74,7 @@ function install() {
   ].join('\r\n'));
   // .vbs: runs the .cmd with no visible window
   fs.writeFileSync(HIDDEN, [
-    "' Starts the Jotcairn server with no window. Created by npm run autostart:on.",
+    "' Starts the Taskule server with no window. Created by npm run autostart:on.",
     `CreateObject("WScript.Shell").Run """${LAUNCHER}""", 0, False`,
     '',
   ].join('\r\n'));
@@ -83,7 +84,7 @@ function install() {
     `$s.TargetPath = ${q(WSCRIPT)}`,
     `$s.Arguments = ${q(`"${HIDDEN}"`)}`,
     `$s.WorkingDirectory = ${q(ROOT)}`,
-    "$s.Description = 'Starts the Jotcairn notes server (hidden). Remove with: npm run autostart:off'",
+    "$s.Description = 'Starts the Taskule notes server (hidden). Remove with: npm run autostart:off'",
     '$s.Save()',
   ].join('; '));
   for (const f of [...LEGACY, ...OLD_FILES]) if (fs.existsSync(f)) fs.unlinkSync(f);
@@ -104,7 +105,7 @@ async function main() {
     install();
     console.log(`Auto-start installed:\n  ${STARTUP_LINK}\n  → runs the server hidden at every login (log: data\\server.log)`);
     if (await isRunning()) {
-      console.log(`Jotcairn is already running on http://localhost:${PORT} — leaving it as is.`);
+      console.log(`Taskule is already running on http://localhost:${PORT} — leaving it as is.`);
     } else {
       startNow();
       for (let i = 0; i < 20 && !(await isRunning()); i++) await new Promise((r) => setTimeout(r, 500));

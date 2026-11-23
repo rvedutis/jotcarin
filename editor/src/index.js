@@ -1,4 +1,4 @@
-// Rich-text editor for Jotcairn, built on TipTap (ProseMirror).
+// Rich-text editor for Taskule, built on TipTap (ProseMirror).
 // Bundled to public/vendor/editor.js by `npm run build:editor`.
 import { Editor, Node, Extension, mergeAttributes, generateJSON } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';

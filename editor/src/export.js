@@ -126,7 +126,7 @@ function imageSize(node, img, maxPx) {
 }
 
 const stamp = () => todayISO();
-const exportTitle = () => `Jotcairn export — ${formatDate(todayISO())}`;
+const exportTitle = () => `Taskule export — ${formatDate(todayISO())}`;
 
 // ------------------------------------------------------------------ Markdown (.zip)
 const mdEscape = (s) => s.replace(/([\\`*_[\]<>|])/g, '\\$1');
@@ -216,7 +216,7 @@ export async function exportMarkdown(data, onProgress) {
   const model = buildModel(data);
   const images = await loadImages(model, onProgress);
   onProgress?.('Writing Markdown…');
-  const root = `Jotcairn ${stamp()}`;
+  const root = `Taskule ${stamp()}`;
   const files = {};
   const imageFiles = new Map();
   const addImage = (src, img) => {
@@ -258,7 +258,7 @@ export async function exportMarkdown(data, onProgress) {
   }
   files[`${root}/To-dos.md`] = strToU8(todoLines.join('\n'));
   const zip = zipSync(files, { level: 6 });
-  return { blob: new Blob([zip], { type: 'application/zip' }), filename: `jotcairn-markdown-${stamp()}.zip` };
+  return { blob: new Blob([zip], { type: 'application/zip' }), filename: `taskule-markdown-${stamp()}.zip` };
 }
 
 // ------------------------------------------------------------------ Word (.docx)
@@ -392,7 +392,7 @@ export async function exportWord(data, onProgress) {
   onProgress?.('Writing Word document…');
   const ctx = { images, listInstance: 0 };
   const children = [
-    new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun('Jotcairn')] }),
+    new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun('Taskule')] }),
     new Paragraph({ children: [new TextRun({ text: `Exported ${formatDate(todayISO())} · ${model.noteCount} notes`, color: '6C7389' })], spacing: { after: 240 } }),
     new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('To-dos')] }),
   ];
@@ -423,7 +423,7 @@ export async function exportWord(data, onProgress) {
     });
   }
   const document = new Document({
-    creator: 'Jotcairn',
+    creator: 'Taskule',
     title: exportTitle(),
     styles: {
       default: { document: { run: { font: 'Calibri', size: 22 } } },
@@ -437,7 +437,7 @@ export async function exportWord(data, onProgress) {
     }],
   });
   const blob = await Packer.toBlob(document);
-  return { blob, filename: `jotcairn-${stamp()}.docx` };
+  return { blob, filename: `taskule-${stamp()}.docx` };
 }
 
 // ------------------------------------------------------------------ PDF
@@ -571,7 +571,7 @@ export async function exportPdf(data, onProgress) {
   onProgress?.('Writing PDF…');
   const ctx = { images };
   const content = [
-    { text: 'Jotcairn', style: 'title' },
+    { text: 'Taskule', style: 'title' },
     { text: `Exported ${formatDate(todayISO())} · ${model.noteCount} notes`, color: '#6c7389', margin: [0, 0, 0, 18] },
     { text: 'To-dos', style: 'h1' },
   ];
@@ -597,7 +597,7 @@ export async function exportPdf(data, onProgress) {
     }
   }
   const def = {
-    info: { title: exportTitle(), creator: 'Jotcairn' },
+    info: { title: exportTitle(), creator: 'Taskule' },
     pageSize: 'LETTER',
     pageMargins: [54, 54, 54, 54],
     content,
@@ -613,5 +613,5 @@ export async function exportPdf(data, onProgress) {
     },
   };
   const blob = await pdfMake.createPdf(def).getBlob();
-  return { blob, filename: `jotcairn-${stamp()}.pdf` };
+  return { blob, filename: `taskule-${stamp()}.pdf` };
 }

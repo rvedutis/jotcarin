@@ -1,23 +1,23 @@
 'use strict';
-// Writes the Jotcairn shortcuts with the app's ID (AppUserModelID) so Windows groups a pinned
+// Writes the Taskule shortcuts with the app's ID (AppUserModelID) so Windows groups a pinned
 // taskbar icon and the running window as one button. Run by scripts/package-app.js:
-//   electron electron/shortcuts.js <path to Jotcairn.exe> [--no-new]
+//   electron electron/shortcuts.js <path to Taskule.exe> [--no-new]
 // Creates/replaces the Start menu and Desktop shortcuts (unless --no-new) and fixes any
-// existing taskbar pin that points at Jotcairn.exe.
+// existing taskbar pin that points at Taskule.exe.
 const { app, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const APP_ID = 'local.jotcairn.app'; // keep in sync with electron/main.js
+const APP_ID = 'local.taskule.app'; // keep in sync with electron/main.js
 
 app.whenReady().then(() => {
-  const exe = process.argv.find((a) => /Jotcairn\.exe$/i.test(a));
+  const exe = process.argv.find((a) => /Taskule\.exe$/i.test(a));
   const makeNew = !process.argv.includes('--no-new');
-  if (!exe || !fs.existsSync(exe)) { console.error('Jotcairn.exe not found'); app.exit(1); return; }
+  if (!exe || !fs.existsSync(exe)) { console.error('Taskule.exe not found'); app.exit(1); return; }
   const opts = {
     target: exe,
     cwd: path.dirname(exe),
-    description: 'Jotcairn notes and to-dos',
+    description: 'Taskule notes and to-dos',
     icon: exe,
     iconIndex: 0,
     appUserModelId: APP_ID,
@@ -31,14 +31,14 @@ app.whenReady().then(() => {
 
   if (makeNew) {
     const startMenu = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
-    write(path.join(startMenu, 'Jotcairn.lnk'), 'create');
-    write(path.join(app.getPath('desktop'), 'Jotcairn.lnk'), 'create');
-    // Shortcuts from before the app was renamed (Actionbase) point at an app that no longer exists.
-    for (const old of [path.join(startMenu, 'Actionbase.lnk'), path.join(app.getPath('desktop'), 'Actionbase.lnk')]) {
+    write(path.join(startMenu, 'Taskule.lnk'), 'create');
+    write(path.join(app.getPath('desktop'), 'Taskule.lnk'), 'create');
+    // Shortcuts from the app's earlier names (Jotcairn, Actionbase) point at an app that no longer exists.
+    for (const old of ['Jotcairn.lnk', 'Actionbase.lnk'].flatMap((n) => [path.join(startMenu, n), path.join(app.getPath('desktop'), n)])) {
       try { if (fs.existsSync(old)) { fs.unlinkSync(old); console.log(`  removed old shortcut: ${old}`); } } catch { /* leave it */ }
     }
   }
-  // Existing taskbar pins to Jotcairn.exe: add the app ID ('update' keeps the pin in place).
+  // Existing taskbar pins to Taskule.exe: add the app ID ('update' keeps the pin in place).
   const pinned = path.join(app.getPath('appData'), 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar');
   try {
     for (const f of fs.readdirSync(pinned)) {

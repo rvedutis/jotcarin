@@ -1,6 +1,6 @@
 {
-  "name": "jotcairn",
-  "productName": "Jotcairn",
+  "name": "taskule",
+  "productName": "Taskule",
   "version": "1.0.0",
   "description": "Local notes + to-dos with folders, a rich-text editor, inline tasks, natural-language dates and global search.",
   "private": true,
